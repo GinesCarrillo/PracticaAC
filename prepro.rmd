@@ -1,0 +1,77 @@
+
+Importamos librerias
+
+```{r}
+library(ggplot2)
+```
+
+Accedemos a la url donde se encuentra la base de datos. Descargamos los ficheros en la carpeta credit
+
+```{r}
+url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
+
+# Download and unzip the dataset
+temp <- tempfile()
+download.file(url, temp)
+unzip(temp, exdir = "./credit")
+unlink(temp)  # Remove temporary file
+```
+
+Leemos los datos del fichero crx.data
+```{r}
+credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
+```
+
+```{r}
+summary(credit)
+```
+
+Indicamos los datos que son categoricos
+
+```{r}
+campos_categoricos = c("V1", "V4", "V5", "V6", "V7", "V9", "V10", "V12", "V13", "V16") #nolint
+credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor)
+lapply(credit[campos_categoricos], FUN = levels)
+```
+
+Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable 4 le falta el valor "t"
+
+```{r}
+levels(credit$V4) <- c(levels(credit$V4), "t")
+```
+
+Renombramos las columnas a sus nombres reales extraidos de https://github.com/lereedjr/Practicum2/blob/master/credit%20approval.R
+
+```{r}
+colnames(credit)[colnames(credit) == "V1"] ="Sexo"
+colnames(credit)[colnames(credit) == "V2"] ="Edad"
+colnames(credit)[colnames(credit) == "V3"] ="Deuda"
+colnames(credit)[colnames(credit) == "V4"] ="Estado_civil"
+colnames(credit)[colnames(credit) == "V5"] ="Es_cliente"
+colnames(credit)[colnames(credit) == "V6"] ="Nivel_educativo"
+colnames(credit)[colnames(credit) == "V7"] ="Etnia"
+colnames(credit)[colnames(credit) == "V8"] ="Anos_cotizados"
+colnames(credit)[colnames(credit) == "V9"] ="Impago_previo"
+colnames(credit)[colnames(credit) == "V10"] ="Trabaja"
+colnames(credit)[colnames(credit) == "V11"] ="Calificacion_crediticia"
+colnames(credit)[colnames(credit) == "V12"] ="Licencia_de_conducir"
+colnames(credit)[colnames(credit) == "V13"] ="Ciudadano"
+colnames(credit)[colnames(credit) == "V14"] ="Codigo_postal"
+colnames(credit)[colnames(credit) == "V15"] ="Ingresos"
+colnames(credit)[colnames(credit) == "V16"] ="Aprobado"
+# Equivalente a colnames(credit) <- c("Sexo","Edad","Deuda","Estado civil","Es cliente","Nivel educativo","Etnia","Anos cotizados","Prioridad","Trabaja","Calificacion crediticia","Licencia de conducir","Codigo postal","Ingresos","Aprobado")
+summary(credit)
+```
+
+```{r}
+campos = 1:15
+campos_numericos = c(2, 3, 8, 11, 14, 15)
+campos_log = c(8, 11, 14, 15)
+campos_no_log = setdiff(campos_numericos, campos_log)
+campos_categoricos = setdiff(campos, campos_numericos)
+```
+```{r}
+library(caret)
+variance = nearZeroVar(credit[campos_numericos], saveMetrics = T)
+variance
+```

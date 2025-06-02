@@ -1,0 +1,20 @@
+```{r}
+url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
+
+# Download and unzip the dataset
+temp <- tempfile()
+download.file(url, temp)
+unzip(temp, exdir = "./credit")
+unlink(temp)  # Remove temporary file
+```
+
+Leemos los datos del fichero crx.data y los separamos en 553 (80%) datos para el entrenamiento y 137 (20%) para los tests
+
+```{r}
+credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
+credit.trainIdx <- readRDS("./credit.trainIdx")
+credit.Datos.Train <- credit[credit.trainIdx,]
+credit.Datos.Test <- credit[-credit.trainIdx,]
+nrow(credit.Datos.Train)
+nrow(credit.Datos.Test)
+```

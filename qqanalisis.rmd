@@ -1,0 +1,139 @@
+Importamos librerias
+
+```{r}
+library(ggplot2)
+```
+
+Accedemos a la url donde se encuentra la base de datos. Descargamos los ficheros en la carpeta credit
+
+```{r}
+url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
+
+# Download and unzip the dataset
+temp <- tempfile()
+download.file(url, temp)
+unzip(temp, exdir = "./credit")
+unlink(temp)  # Remove temporary file
+```
+
+Leemos los datos del fichero crx.data
+```{r}
+credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
+```
+
+```{r}
+summary(credit)
+```
+
+Indicamos los datos que son categoricos
+
+```{r}
+campos_categoricos = c("V1", "V4", "V5", "V6", "V7", "V9", "V10", "V12", "V13", "V16") #nolint
+credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor)
+lapply(credit[campos_categoricos], FUN = levels)
+```
+
+Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable 4 le falta el valor "t"
+
+```{r}
+levels(credit$V4) <- c(levels(credit$V4), "t")
+```
+
+Renombramos las columnas a sus nombres reales extraidos de https://github.com/lereedjr/Practicum2/blob/master/credit%20approval.R
+
+```{r}
+colnames(credit)[colnames(credit) == "V1"] ="Sexo"
+colnames(credit)[colnames(credit) == "V2"] ="Edad"
+colnames(credit)[colnames(credit) == "V3"] ="Deuda"
+colnames(credit)[colnames(credit) == "V4"] ="Estado_civil"
+colnames(credit)[colnames(credit) == "V5"] ="Es_cliente"
+colnames(credit)[colnames(credit) == "V6"] ="Nivel_educativo"
+colnames(credit)[colnames(credit) == "V7"] ="Etnia"
+colnames(credit)[colnames(credit) == "V8"] ="Anos_cotizados"
+colnames(credit)[colnames(credit) == "V9"] ="Prioridad?"
+colnames(credit)[colnames(credit) == "V10"] ="Trabaja"
+colnames(credit)[colnames(credit) == "V11"] ="Calificacion_crediticia"
+colnames(credit)[colnames(credit) == "V12"] ="Licencia_de_conducir"
+colnames(credit)[colnames(credit) == "V13"] ="Ciudadano"
+colnames(credit)[colnames(credit) == "V14"] ="Codigo_postal"
+colnames(credit)[colnames(credit) == "V15"] ="Ingresos"
+colnames(credit)[colnames(credit) == "V16"] ="Aprobado"
+# Equivalente a colnames(credit) <- c("Sexo","Edad","Deuda","Estado civil","Es cliente","Nivel educativo","Etnia","Anos cotizados","Prioridad","Trabaja","Calificacion crediticia","Licencia de conducir","Codigo postal","Ingresos","Aprobado")
+summary(credit)
+```
+
+```{r}
+campos = 1:15
+campos_numericos = c(2, 3, 8, 11, 14, 15)
+campos_log = c(8, 11, 14, 15)
+campos_no_log = setdiff(campos_numericos, campos_log)
+campos_categoricos = setdiff(campos, campos_numericos)
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+Intentamos averiguar la distribucion que siguen los atributos
+
+#Anos cotizados
+Vemos si sigue una distribucion normal
+```{r}
+anos_cot <- credit$Anos_cotizados
+shapiro.test(anos_cot)
+qqnorm(anos_cot)
+
+```
+Obtenemos un p-valor muy bajo. Descartamos la hipotesis. Comprobamos ahora si es lognormal:
+```{r}
+shapiro.test(log(anos_cot[anos_cot>0]))
+qqplot(anos_cot, "lognormal")
+```
+
+# Crear una matriz para Z
+```{r}
+z_matrix <- matrix(credit$Aprobado, nrow = length(unique(credit$Edad)), byrow = TRUE)
+```
+# Valores únicos de x e y
+```{r}
+# Instalar y cargar librerías necesarias
+if (!requireNamespace("plotly")) install.packages("plotly")
+library(plotly)
+if (!requireNamespace("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+
+
+log_ingresos = log(credit$Ingresos)
+# Crear una cuadrícula para contar frecuencias
+breaks_x <- seq(min(credit$Edad), max(credit$Edad), length.out = 5)  # Divisiones en X
+breaks_y <- seq(min(log_ingresos), max(log_ingresos), length.out = 1)  # Divisiones en Y
+
+# Contar frecuencias en cada celda
+hist_3d <- table(cut(credit$Edad, breaks = breaks_x), cut(log_ingresos, breaks = breaks_y))
+
+# Convertir a un formato que `plotly` pueda usar
+z_matrix <- as.matrix(hist_3d)
+x_centers <- breaks_x[-1] - diff(breaks_x) / 2
+y_centers <- breaks_y[-1] - diff(breaks_y) / 2
+
+# Graficar el histograma 3D
+plot_ly() %>%
+  add_surface(
+    z = ~z_matrix,
+    x = ~x_centers,
+    y = ~y_centers,
+    colorscale = "Viridis"
+  ) %>%
+  layout(
+    title = "Histograma 3D",
+    scene = list(
+      xaxis = list(title = "Eje X"),
+      yaxis = list(title = "Eje Y"),
+      zaxis = list(title = "Frecuencia")
+    )
+  )
+```

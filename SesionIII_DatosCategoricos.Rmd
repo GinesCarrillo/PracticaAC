@@ -1,0 +1,165 @@
+---
+title: "Introducción a R, Sesión 3, datos categóricos"
+author: "Apredizaje Computacional, Grado en Ingeniería Informática. Universidad de Murcia. Juan A. Botía y Javier G. Marín"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: spacelab
+    highlight: kate
+    df_print: paged
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+# Datos categóricos
+
+
+A menudo, en el contexto del aprendizaje nos vamos a encontrar con conjuntos de datos en los que tanto $\bar{x}$ como $y$ son categóricos. Es, por ejemplo, el caso del conjuto de datos `breast-cancer` <http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+%28Diagnostic%29>. 
+
+En este conjunto de datos hay 10 atributos categóricos, y se corresponde con un problema de clasificación binaria. En este caso, lo cargamos del UCI repository directamente. Fíjaos que, como la URL es tan larga que no cabe en una línea, se usa el comando `paste()` para que quepa en la caja de texto (no sería necesario si se teclea directamente en el interprete R) y que aun funcione un copy/paste del contenido de la caja.
+
+```{r}
+breast <- read.table(paste("https://archive.ics.uci.edu/ml/",
+	  "machine-learning-databases/breast-cancer-wisconsin/",
+	  "breast-cancer-wisconsin.data", sep=""), 
+	sep=",",header=F)
+head(breast)
+```
+
+
+pero si comprobamos la estructura con 
+ 
+ ```{r}
+str(breast)
+```
+
+comprobaremos que es un desastre la importación de datos puesto que los vectores han sido importados como vectores numéricos cuando son datos categóricos y deberían ser factores. 
+Lo podemos arreglar transformando dichos vectores numéricos en factores con:
+
+```{r}
+breast <- data.frame(lapply(breast,FUN=as.factor))
+```
+
+Todavía tenemos que modificar más cosas. Si nos vamos de nuevo a <https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.names}, donde aparece la descripción de los datos, veremos que la clase es la variable 11, y que el valor 2 significa tumor benigno y el 4 tumor maligno. Podemos cambiar las etiquetas de ese factor para que sean mas legibles.
+
+```{r}
+levels(breast$V11)<-c("benign","malignant")
+```
+
+En la información detallada por `str(breast)` nos muestra otras anomalías. La V7 tiene 11 niveles (y en la descripción de `breast-cancer-wisconsin.names` dice que son variables con 10 niveles). Si obtenemos los niveles de dicha variable vemos cual es el problema.
+
+```{r}
+levels(breast$V7)
+```
+
+ que muestra que hay un valor ``?'', es decir, la base de datos tiene datos incompletos y, dichos datos, están etiquetados con el carácter ``?'' (que no es el habitual que sería ``NA''). Pero antes de ello vemos otro problema con la variable V10 que solo tiene 9 niveles, es decir, hay algún valor que nunca aparece en los datos. Vemos cual es mostrando los niveles de dicha variable.
+ 
+ ```{r}
+levels(breast$V10)
+```
+
+que es el valor ``9''. Se le puede añadir fácilmente con el comando:
+
+```{r}
+levels(breast$V10)<-c(levels(breast$V10),"9")
+str(breast$V10)
+```
+
+Si nos desagrada que ahora los niveles no estén ``ordenados'' podemos solucionarlo con
+
+```{r}
+breast$V10<-factor(breast$V10,levels=sort(as.integer(levels(breast$V10))))
+levels(breast$V10)
+```
+
+
+Pero recordemos que tenemos que volver a cargar bien la base de datos con el ``missing data'' bien codificado como ``NA'' en vez de ``?`''. También hay que arreglar el asunto de ese valor que no aparece nunca en los datos de entrenchment (pero es un valor legítimo), y luego volver a hacer las transformaciones.
+
+```{r}
+breast <- read.table(paste("https://archive.ics.uci.edu/ml/",
+	  "machine-learning-databases/breast-cancer-wisconsin/",
+	  "breast-cancer-wisconsin.data", sep=""), 
+	sep=",",header=F, na.strings ="?")
+```
+
+Antes de pasarlos a factores vamos a ver cuantos datos, y cuales de ellos, tienen ``missing data'', usaremos el comando `complete.cases()` que veremos más adelante en la sección de como tratar los datos nulos. Igualmente, y por ahora, no vamos a hacer nada con esos datos perdidos (ya veremos que hacer en dicha sección).
+
+```{r}
+sum(!complete.cases(breast))
+```
+
+
+Repetimos todos los pasos para convertir en factores, corregir etiquetas, añadir niveles y ordenarlos.
+
+```{r}
+# Transformamos todo a factores
+breast <- data.frame(lapply(breast,FUN=as.factor))
+# Arreglamos etiquetas de V11
+levels(breast$V11)<-c("benign","malignant")
+# Añadimos etiqueta no usada y ordenamos etiquetas de V10
+levels(breast$V10)<-c(levels(breast$V10),"9")
+breast$V10<-factor(breast$V10,levels=sort(as.integer(levels(breast$V10))))
+```
+
+por último vemos que V1 es un identificador individual para cada dato, que no tiene utilidad para el aprendizaje, con lo que podríamos eliminarlo.
+
+```{r}
+# Eliminamos V1
+breast$V1<-NULL
+```
+
+
+También podríamos cambiarle las etiquetas a las variables para que se correspondan con los nombres que hay en la documentación.
+
+```{r}
+names(breast)<-c("Clump Thickness","Uniformity of Cell Size ","Uniformity of Cell Shape",
+"Marginal Adhesion", "Single Epithelial Cell Size", "Bare Nuclei", "Bland Chromatin",
+"Normal Nucleoli","Mitoses","Class")
+```
+
+Y así finalmente ya tenemos la base de datos preparada para usarla:
+
+```{r}
+str(breast)
+```
+
+Si queremos obtener un resumen estadístico de datos categóricos como estos,
+obtendremos lo siguiente:
+```{r}
+summary(breast)
+```
+
+lo que obtendremos será una descripción básica de la distribución de las
+distintas categorías, para cada atributo (obsérvese que el séptimo atributo,
+aunque es categórico, con valores 1, 2 y 3, se interpreta como numérico):
+
+y obtenemos esa descripción básica de la distribución de las distintas categorías (muestran las 6 más frecuentes y agrega las restantes).
+
+La verdad es que para este conjunto de datos particular nos podríamos haber ahorrado todo este trabajo, puesto que es uno de los incluidos en el paquete `mlbench` y podríamos tener esta misma base de datos con:
+
+```{r}
+library(mlbench)
+data(BreastCancer)
+str(BreastCancer)
+```
+
+Y observando los datos de esta base de datos cargada de la libreria vemos que las primeras cinco variables son factores ordenados:
+
+
+Es fácil arreglar nuestra versión de esta base de datos transformando esos factores en factores ordenados:
+
+```{r}
+for (i in 1:5) breast[,i]<-factor(breast[,i],ordered=T)
+str(breast)
+```
+
+
+Por último veamos como hacer un scatter plot de estos datos. Recordemos que se necesitarían vectores numéricos en los atributos, y estos son factores, por lo que tendremos que convertirlos y usaremos `lapply()`:
+
+```{r}
+library(caret)
+featurePlot(x=lapply(breast[,-10],FUN=as.integer),
+            y=breast$Class,"strip",jitter=T)
+```
+
+> Ejercicio: Realicemos los anteriores pasos con una base de datos nueva, `Soybean` presente tanto en la librería `mlbench` como en el UCI Repository en <https://archive.ics.uci.edu/ml/machine-learning-databases/soybean}. Trata de importar los datos desde el UCI (fíjate que está dividida en dos ficheros, `soybean-large.data` y `soybean-large.test` y tendrás que combinarlos) de forma que queden como la base de datos proporcinada por `mlbench` mediante el comando `data(Soybean)`. Trata de arreglar los datos y anímate a estudiarlos un poco.

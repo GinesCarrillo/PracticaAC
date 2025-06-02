@@ -1,0 +1,229 @@
+Importamos librerias
+
+```{r}
+library(ggplot2)
+```
+
+Accedemos a la url donde se encuentra la base de datos. Descargamos los ficheros en la carpeta credit
+
+```{r}
+url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
+
+# Download and unzip the dataset
+temp <- tempfile()
+download.file(url, temp)
+unzip(temp, exdir = "./credit")
+unlink(temp)  # Remove temporary file
+```
+
+Leemos los datos del fichero crx.data
+```{r}
+credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
+```
+
+Si miramos el fichero crx.names observamos que los rangos para los valores de cada columna son:
+
+    A1:	b, a.
+    A2:	continuous.
+    A3:	continuous.
+    A4:	u, y, l, t.
+    A5:	g, p, gg.
+    A6:	c, d, cc, i, j, k, m, r, q, w, x, e, aa, ff.
+    A7:	v, h, bb, j, n, z, dd, ff, o.
+    A8:	 continuous.
+    A9:	 t, f.
+    A10: t, f.
+    A11:	continuous.
+    A12:	t, f.
+    A13:	g, p, s.
+    A14:	continuous.
+    A15:	continuous.
+    A16: +,-         (class attribute)
+
+Para comprobar el rango de los valores y estadísticas de los valores:
+
+```{r}
+summary(credit)
+```
+
+Indicamos los datos que son categoricos
+
+```{r}
+campos_categoricos = c("V1", "V4", "V5", "V6", "V7", "V9", "V10", "V12", "V13", "V16") #nolint
+credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor)
+lapply(credit[campos_categoricos], FUN = levels)
+```
+
+Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable 4 le falta el valor "t"
+
+```{r}
+levels(credit$V4) <- c(levels(credit$V4), "t")
+```
+
+Renombramos las columnas a sus nombres reales extraidos de https://github.com/lereedjr/Practicum2/blob/master/credit%20approval.R
+
+```{r}
+colnames(credit)[colnames(credit) == "V1"] ="Sexo"
+colnames(credit)[colnames(credit) == "V2"] ="Edad"
+colnames(credit)[colnames(credit) == "V3"] ="Deuda"
+colnames(credit)[colnames(credit) == "V4"] ="Estado_civil"
+colnames(credit)[colnames(credit) == "V5"] ="Es_cliente"
+colnames(credit)[colnames(credit) == "V6"] ="Nivel_educativo"
+colnames(credit)[colnames(credit) == "V7"] ="Etnia"
+colnames(credit)[colnames(credit) == "V8"] ="Anos_cotizados"
+colnames(credit)[colnames(credit) == "V9"] ="Prioridad?"
+colnames(credit)[colnames(credit) == "V10"] ="Trabaja"
+colnames(credit)[colnames(credit) == "V11"] ="Calificacion_crediticia"
+colnames(credit)[colnames(credit) == "V12"] ="Licencia_de_conducir"
+colnames(credit)[colnames(credit) == "V13"] ="Ciudadano"
+colnames(credit)[colnames(credit) == "V14"] ="Codigo_postal"
+colnames(credit)[colnames(credit) == "V15"] ="Ingresos"
+colnames(credit)[colnames(credit) == "V16"] ="Aprobado"
+# Equivalente a colnames(credit) <- c("Sexo","Edad","Deuda","Estado civil","Es cliente","Nivel educativo","Etnia","Anos cotizados","Prioridad","Trabaja","Calificacion crediticia","Licencia de conducir","Codigo postal","Ingresos","Aprobado")
+summary(credit)
+```
+
+
+
+
+
+
+
+
+
+Mostramos la grafica de la variable 15 en escala logaritmica. Por su rango de valores y distribucion, sospechamos que se trata de los ingresos de la persona que pide el credito
+
+```{r}
+datos_pos <- credit[credit$V15 > 0,]
+show(datos_pos)
+# myhist <- ggplot(data=datos_pos, aes(V15))
+# geom_histogram(col = "blue", fill = "orange", alpha = 0.2) +
+# labs(title = "Histograma las perras de la gente", y = "Count")
+# show(myhist)
+
+# sum(credit$V15 == 0)
+```
+
+
+
+```{r}
+library(ggplot2)
+ggplot(data = credit, aes(x = log(credit$V15), color = credit$V16 , fill = credit$V16)) + #nolint
+  geom_density(alpha = 0.6) +
+  scale_fill_discrete() +
+  scale_color_discrete() +
+  ylab("") +
+  xlab("Values")
+```
+
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+campos_numericos = c(2, 3, 16)
+credit_sin_categoricos <- credit[, campos_numericos]
+idvar = length(campos_numericos)
+mymelt <- melt(credit_sin_categoricos, id.vars=idvar, value.name="FeatureValue", variable.name="CreditFeature")
+
+pdf(file="f_densidades.pdf")
+ggplot(data = mymelt, aes(x = (FeatureValue), color = Aprobado , fill = Aprobado)) + #nolint
+  geom_density(alpha = 0.6) +
+  scale_fill_discrete() +
+  scale_color_discrete() +
+  ylab("") +
+  xlab("Values")+
+  facet_wrap(~ CreditFeature, ncol=2 ,scales = "free")
+  dev.off()
+  ```
+
+
+```{r}
+campos = 1:15
+campos_numericos = c(2, 3, 8, 11, 14, 15)
+campos_log = c(8, 11, 14, 15)
+campos_no_log = setdiff(campos_numericos, campos_log)
+campos_categoricos = setdiff(campos, campos_numericos)
+```
+```{r}
+credit_no_log <- credit[, c(campos_no_log, 16)]
+idvar = length(campos_no_log) + 1
+melt_no_log <- melt(credit_no_log, id.vars=idvar, value.name="FeatureValue", variable.name="CreditFeature")
+
+pdf(file="f_densidades.pdf")
+ggplot(data = melt_no_log, aes(x = (FeatureValue), color = Aprobado , fill = Aprobado)) + #nolint
+  geom_density(alpha = 0.6) +
+  scale_fill_discrete() +
+  scale_color_discrete() +
+  ylab("") +
+  xlab("Values")+
+  facet_wrap(~ CreditFeature, ncol=2 ,scales = "free")
+
+credit_log <- credit[, c(campos_log, 16)]
+idvar = length(campos_log) + 1
+melt_log <- melt(credit_log, id.vars=idvar, value.name="FeatureValue", variable.name="CreditFeature")
+
+ggplot(data = melt_log, aes(x = log(FeatureValue), color = Aprobado , fill = Aprobado)) + #nolint
+  geom_density(alpha = 0.6) +
+  scale_fill_discrete() +
+  scale_color_discrete() +
+  ylab("") +
+  xlab("Values")+
+  facet_wrap(~ CreditFeature, ncol=2 ,scales = "free")
+
+
+  dev.off()
+
+```
+```{r}
+campos_numericos = c(2, 3, 8, 11, 14, 15, 16)
+campos_categoricos  = c(1,4, 5, 6, 7, 9, 10, 11, 12, 13, 16)
+credit_categoricos <- credit[, campos_categoricos]
+plot(credit_categoricos)
+```
+```{r}
+campos_categoricos  = c(1,4, 5, 6, 7, 9, 10, 11, 12, 13, 16)
+credit_categoricos <- credit[, campos_categoricos]
+idvar = length(campos_categoricos)
+mymelt <- melt(credit_categoricos, id.vars=idvar, value.name="FeatureValue", variable.name="CreditFeature")
+
+pdf(file="f_categoricos.pdf")
+ggplot(data = mymelt, aes(x = (FeatureValue), color = Aprobado , fill = Aprobado)) + #nolint
+  geom_density(alpha = 0.6) +
+  scale_fill_discrete() +
+  scale_color_discrete() +
+  ylab("") +
+  xlab("Values")+
+  facet_wrap(~ CreditFeature, ncol=2 ,scales = "free")
+```
+
+Codigo para mapas de calor
+```{r}
+freq <- prop.table(table(credit$Sexo))
+# Convertir tabla de contingencia a data frame
+library(reshape2)
+tabla_contingencia <- table(credit$Sexo, credit$Aprobado)
+tabla_df <- as.data.frame(tabla_contingencia)
+# Gráfico de mapa de calor
+pdf(file="sexo.pdf")
+ggplot(tabla_df, aes(Var1, Var2, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(title = "Mapa de Calor de la Relación entre Columnas", x = "Columna1", y = "Columna2") +
+  theme_minimal()
+dev.off()
+```
+
+
+
+```{r}
+single_women_with_credit <- subset(credit, Sexo == "a" & Trabaja == "f" & Aprobado == "+")
+single_women_with_credit
+```
+```{r}
+subset(credit, Estado_civil == "t" )
+
+```
+```{r}
+
+```

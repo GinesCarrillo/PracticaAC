@@ -1,0 +1,326 @@
+---
+title: "Práctica de Aprendizaje Computacional"
+author: "Juan Diego Gallego Nicolás, Yago Ibarrola Lapeña, Ginés Carrillo Ibáñez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    theme: readable
+---
+
+# Introducción
+
+Este documento es la memoria de nuestra práctica para la asignatura Aprendizaje Computacional de la Mención en Computación del Grado de Informática
+de la Universidad de Murcia.
+
+El proyecto consiste en un estudio de diferentes modelos de aprendizaje automático. Para ello, se ha utilizado la base de datos
+[Credit Approval](https://archive.ics.uci.edu/dataset/27/credit+approval) de 
+[UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/), 
+que contiene información sobre la concesión o denegación de créditos bancarios.
+
+En primer lugar, se ha llevado a cabo un estudio de la base de datos. Hemos identificado atributos numéricos y categóricos y hemos 
+renombrado
+las columnas según la información que hemos encontrado en un repositorio de 
+[Kaggle](https://www.kaggle.com/code/dilipkumarb/credit-card-approval-classification-model).
+Hemos proseguido con una serie de análisis monovariable y multivariable discriminando entre créditos concecidos y denegados.
+Esto nos ha permitido hacernos una idea de la relación entre los diferentes atributos.
+Para cerrar esta sección, hemos probado un Análisis de Componentes Principales (PCA) para tener una referencia
+sencilla con la que comparar los modelos de aprendizaje.
+
+Después del análisis hemos provado diversos modelos de clasificación 
+supervisada utilizando el lenguaje R y la librería caret, aplicando técnicas 
+de preprocesado, ajuste de hiperparámetros (((y evaluación cruzada))). 
+El dataset se ha dividido en datos de entrenamiento y datos de test para
+comprobar la eficacia de los modelos.
+En total, se han probado cuatro algoritmos representativos de distintos paradigmas de aprendizaje
+automático. 
+
+# Carga y preparación de datos
+
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
+
+if (!requireNamespace("caret", quietly = TRUE)) {
+    install.packages("caret")
+}
+
+if (!requireNamespace("tidyverse", quietly = TRUE)) {
+    install.packages("tidyverse")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    install.packages("ggplot2")
+}
+if (!requireNamespace("gridExtra", quietly = TRUE)) {
+    install.packages("gridExtra")
+}
+
+
+library(caret)
+library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+
+# Cargar dataset
+url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
+
+# Download and unzip the dataset
+temp <- tempfile()
+download.file(url, temp)
+unzip(temp, exdir = "./credit")
+unlink(temp)  # Remove temporary file
+
+credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
+
+summary(credit)
+```
+
+Explica brevemente cuántos datos hay en cada conjunto y cómo se han identificado los valores ausentes.
+
+# Análisis Exploratorio de Datos (EDA)
+
+La primera labor que debemos llevar a cabo al empezar a trabajar con un dataset desconocido es entender la información 
+que este contiene. En esta fase, conocida como Análisis Exploratorio de Datos, llevaremos a cabo las siguientes tareas:
+- Etiquetado de los atributos:
+    en vista de la ausencia de etiquetas interpretables para los atributos del dataset, en esta primera etapa hemos buscado
+    entender el significado de cada uno de ellos y renombrarlos de manera más intuitiva.
+- Análisis monovariable:
+    a continuación, hemos analizado las distribuciones seguidas por cada uno de los atributos, estudiando también sus valores 
+    máximos, mínimos, medias y cuartiles.
+- Analísis multivariable:
+    finalmente, hemos realizado un estudio de cómo distintos atributos se relacionan entre sí.
+
+
+
+## Etiquetado de los atributos
+
+En un primer momento, intentamos averiguar los significados de los campos de forma manual. Conseguimos deducir que la Variable V2 
+representa la edad del solicitante percatándonos de que los decimales correspondían con múltiplos de 1/12, es decir, el valor 34.083 se corresponde con la edad de 34 años y 1 mes.
+
+Otro campo que pudimos deducir fue el de Ingresos, basándonos en la distribución que tomaban sus valores (y que veremos más adelante).
+
+Finalmente, decidimos investigar en foros online para buscar el significado del resto de atributos. Ahí es cuando encontramos
+el siguiente proyecto de [Kaggle](https://www.kaggle.com/code/dilipkumarb/credit-card-approval-classification-model).
+
+Con esta información, hi renombrado:
+```{r}
+colnames(credit)[colnames(credit) == "V1"] ="Sexo"
+colnames(credit)[colnames(credit) == "V2"] ="Edad"
+colnames(credit)[colnames(credit) == "V3"] ="Deuda"
+colnames(credit)[colnames(credit) == "V4"] ="Estado_civil"
+colnames(credit)[colnames(credit) == "V5"] ="Es_cliente"
+colnames(credit)[colnames(credit) == "V6"] ="Nivel_educativo"
+colnames(credit)[colnames(credit) == "V7"] ="Etnia"
+colnames(credit)[colnames(credit) == "V8"] ="Anos_cotizados"
+colnames(credit)[colnames(credit) == "V9"] ="Impago_previo"
+colnames(credit)[colnames(credit) == "V10"] ="Trabaja"
+colnames(credit)[colnames(credit) == "V11"] ="Calificacion_crediticia"
+colnames(credit)[colnames(credit) == "V12"] ="Licencia_de_conducir"
+colnames(credit)[colnames(credit) == "V13"] ="Ciudadano"
+colnames(credit)[colnames(credit) == "V14"] ="Codigo_postal"
+colnames(credit)[colnames(credit) == "V15"] ="Ingresos"
+colnames(credit)[colnames(credit) == "V16"] ="Aprobado"
+```
+
+
+También distinguimos entre campos categóricos y numéricos. Los datos categóricos se deben tratar como el tipo factor.
+Algunos campos numéricos conviene visualizarlos en escala logarítmica.
+
+```{r}
+campos = 1:15
+campos_numericos = c(2, 3, 8, 11, 14, 15)
+campos_log = c(8, 11, 14, 15)
+campos_no_log = setdiff(campos_numericos, campos_log)
+campos_categoricos = setdiff(campos, campos_numericos)
+#campos_categoricos = c("Sexo", "Estado_civil", "Es_cliente", "Nivel_educativo", "Etnia", "Impago_previo", "Trabaja", "Licenc", "Ciudadano", "Aprobado") #nolint
+credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor)
+lapply(credit[campos_categoricos], FUN = levels)
+```
+
+Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t"
+
+```{r}
+levels(credit$Estado_civil) <- c(levels(credit$$Estado_civil), "t")
+```
+
+Tras estas modificaciones, podemos comprobar que nuestro dataset cuenta con 690 muestras de 16 variables.
+
+Para c
+da uno de los predictores categóricos, hemos  rep
+– ¿Cu´antos ejemplos y variables predictorastiene el conjunto de datos? Distingue a las num´ericas
+de las categ´oricas.
+– Para cada predictor categ´orico, reporta, de la mejor forma posible, la distribuci´on de valores y
+com´entalo brevemente.
+– Para cada predictor num´erico, reporta m´ınimo, m´aximo, el primer cuartil, el tercer cuartil, media
+y mediana. Indica si la variable sigue o no una distribuci´on normal.
+– Responde, mediante una sola l´ınea de c´odigo en R, si el conjunto de datos tiene valores nulos y
+cu´antos nulos por columna.
+∗ ¿Existe alguna columna digna de menci´on?
+∗ Elabora una estrategia para el tratamiento de datos nulos y apl´ıcala en el resto de la pr´actica.
+– Representa las posibles relaciones de la variable de clase, de forma individual, con cada una de
+los predictores, haciendo uso de alg´un gr´afico con el mecanismo de las facetas (mostrar varios
+gr´aficos agrupados por alguna caracter´ıstica), y comenta los resultados.
+– Explora si el an´alisis de componentes principales es ´util, en este problema particular, como mecan-
+ismo de visualizaci´on e interpretaci´on de los datos para visualizar la separabilidad de las clases
+y comenta c´omo interpretar´ıas los dos primeros componentes principales. Busca la visualizaci´on
+m´as atractiva posible. Interpreta los datos de manera detallada a la luz de lo que te sugiere el
+mecanismo de visualizaci´on usado.
+– Recuerda analizar con cierta profundidad 3 predictores individualmente (an´alisis monovariable)
+y realizar al menos 1 an´alisis de forma multivariable. No es necesario analizarlos todos (para esta
+pr´actica analizar todos es excesivo), solo los tres m´as interesantes. Si analizas m´as de los pedidos
+deber´ıa estar MUY JUSTIFICADO
+
+## Análisis univariable
+Para llevar a cabo el análisis monovariable, distinguiremos entre los atributos numéricos y categóricos,
+pues la forma de tratarlos es completamente distinta.
+
+### Atributos numéricos
+Para los atributos numéricos, es interesante como punto de partida mostrar su valor mínimo,
+máximo, los cuartiles, la media y la mediana.
+```{r}
+# Tabla con los atributos
+atributosNum <- credit[,c(2,3,8,11,14,15)]
+
+summary(atributosNum)
+```
+
+Vamos a mostrar ahora gráficamente estos atributos, junto con un histograma que nos sirve como primera toma de contacto
+con la distribución que siguen dichos atributos.
+
+```{r}
+
+variables <- c("Edad", "Deuda", "AnosCotizados", "Calificacion_crediticia", "Codigo_postal", "Ingresos")
+
+# Crear una lista para guardar los histogramas
+plots <- list()
+
+for (var in variables) {
+  var_data <- na.omit(credit[[var]])
+  mediana <- median(var_data)
+  media <- mean(var_data)
+  q1 <- quantile(var_data, 0.25)
+  q3 <- quantile(var_data, 0.75)
+
+  p <- ggplot(var_data, aes_string(x = var)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    geom_vline(xintercept = mediana, color = "red", linetype = "solid", size = 1) +
+    geom_vline(xintercept = q1, color = "darkgreen", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = q3, color = "darkgreen", linetype = "dashed", size = 1) +
+    ggtitle(var) +
+    theme_minimal()
+  
+  plots[[var]] <- p
+}
+
+# Mostrar todos los histogramas en una cuadrícula 2x3
+grid.arrange(grobs = plots, ncol = 3)
+```
+
+
+### Atributos categóricos
+
+
+```{r eda-uni}
+# Histogramas, summary(), boxplots, etc.
+```
+
+## Análisis multivariable
+
+```{r eda-multi}
+# Gráficos de facetas, tablas cruzadas, visualización de clase vs predictores
+```
+
+# Preprocesado de datos
+
+– ¿Hay predictores que no tengan utilidad y ser´ıan eliminables? ¿Por y en base a qu´e?
+– ¿Qu´e predictores habr´ıa que normalizar? ¿Por qu´e? ¿Cu´al ser´ıa la estrategia de normalizaci´on en
+cada caso?
+– ¿Podr´ıa ser interesante transformar alg´un atributo o grupos de atributos en uno nuevo? ¿Por
+qu´e?
+
+Explica qué transformaciones se han aplicado:
+- Tratamiento de valores nulos
+- Normalización/escalado
+- Codificación de variables categóricas
+- Creación/eliminación de variables
+
+## Tratamiento de los valores nulos
+
+```{r preprocessing}
+# Preprocesado 1 y preprocesado 2 para comparar más adelante
+    # Cargar índices de train
+    credit.trainIdx <- readRDS("credit.trainIdx")
+
+    # Separación de conjuntos
+    credit.Datos.Train <- credit[credit.trainIdx, ]
+    credit.Datos.Test <- credit[-credit.trainIdx, ]
+```
+
+# Modelado y entrenamiento
+
+– ¿Por qu´e has escogido estudiar ´este o aquel modelo frente a otros potencialmente alternativos?
+– ¿Has identificado y explicado cada uno de los hiper-par´ametros de configuraci´on a explorar de los
+modelos escogidos (m´ınimo los que explora caret para ese modelo)?
+– ¿Por qu´e has escogido probar esos valores espec´ıficos de ´este o aqu´el hiperpar´ametro?
+– ¿Has experimentado con hiperpar´ametros “ocultos” que no ofrece directamente caret? P.e. el
+par´ametro ntree de Random Forest (la implementaci´on rf solo permite modificar mtry, pero
+ntree es tambi´en muy influyente). Ver secci´on 11.2.5 del tutorial caretML.pdf.
+– ¿Has seguido alguna estrategia para la generaci´on del grid de valores de los hiperpar´ametros a
+explorar? ¿Las has detallado? ¿La has justificado?
+10
+– ¿Has hecho exploraciones m´as profundas/varios ciclos de ´este o aqu´el hiperpar´ametro afinando el
+grano? (P.e.: 100, 200, 300, 400, ... y luego 125, 150, 175, 200, 225, 250, 275, ... al detectar un
+pico en 200) ¿Ha funcionado el ajuste de grano m´as fino
+
+
+## Modelos seleccionados
+
+Describe brevemente los 4 modelos y por qué se han escogido.
+
+## Entrenamiento de modelos
+
+```{r train-models}
+# train() para cada modelo
+```
+
+## Búsqueda de hiperparámetros (grid search)
+
+```{r tuning}
+# train() con tuneGrid y trainControl
+```
+
+# Comparación de modelos
+
+– ¿Hay alg´un modelo mejor que los dem´as? Justif´ıcalo.
+– ¿Hay alg´un modelo en particular que sea mejor que otro en particular? Justif´ıcalo.
+– ¿En base a qu´e criterio consideras que ´este o aquel modelo es mejor? Justif´ıcalo.
+
+```{r model-comparison}
+# Comparar métricas: resamples(), summary(), dotplot(), etc.
+```
+
+## Comparación con distintos preprocesados
+
+```{r preproc-compare}
+# Comparación de un modelo entrenado con dos tipos de datos preprocesados
+```
+
+# Selección del modelo final
+
+Justifica por qué se selecciona ese modelo final y qué rendimiento tiene sobre el conjunto de test.
+
+```{r final-eval}
+# predict(), confusionMatrix(), estimación de accuracy final
+```
+
+# Conclusiones
+
+Resumen de hallazgos, aprendizajes y posibles mejoras.
+
+Puedes incluir comentarios subjetivos sobre el proceso, dificultades, o ideas para prácticas futuras.
+
+# Anexos
+
+```{r session-info}
+sessionInfo()
+```

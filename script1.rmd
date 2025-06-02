@@ -1,0 +1,100 @@
+Accedemos a la url donde se encuentra la base de datos. Descargamos los ficheros en la carpeta credit
+
+```{r}
+url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
+
+# Download and unzip the dataset
+temp <- tempfile()
+download.file(url, temp)
+unzip(temp, exdir = "./credit")
+unlink(temp)  # Remove temporary file
+```
+
+Leemos los datos del fichero crx.data y los separamos en 553 (80%) datos para el entrenamiento y 137 (20%) para los tests
+
+```{r}
+credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
+credit.trainIdx <- readRDS("./credit.trainIdx")
+credit.Datos.Train <- credit[credit.trainIdx,]
+credit.Datos.Test <- credit[-credit.trainIdx,]
+nrow(credit.Datos.Train)
+nrow(credit.Datos.Test)
+```
+
+Si miramos el fichero crx.names observamos que los rangos para los valores de cada columna son:
+
+    A1:	b, a.
+    A2:	continuous.
+    A3:	continuous.
+    A4:	u, y, l, t.
+    A5:	g, p, gg.
+    A6:	c, d, cc, i, j, k, m, r, q, w, x, e, aa, ff.
+    A7:	v, h, bb, j, n, z, dd, ff, o.
+    A8:	 continuous.
+    A9:	 t, f.
+    A10: t, f.
+    A11:	continuous.
+    A12:	t, f.
+    A13:	g, p, s.
+    A14:	continuous.
+    A15:	continuous.
+    A16: +,-         (class attribute)
+
+Para comprobar el rango de los valores y estadísticas de los valores:
+
+```{r}
+summary(credit)
+train <- credit.Datos.Train
+```
+
+Indicamos los datos que son categoricos
+
+```{r}
+campos_categoricos = c("V1", "V4", "V5", "V6", "V7", "V9", "V10", "V12", "V13", "V16") #nolint
+train[campos_categoricos] <- lapply(train[campos_categoricos], FUN = as.factor)
+lapply(train[campos_categoricos], FUN = levels)
+```
+
+Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable 4 le falta el valor "t"
+
+```{r}
+levels(train$V4) <- c(levels(train$V4), "t")
+```
+
+
+Mostramos la grafica de la variable 15 en escala logaritmica.
+```{r}
+
+myhist <- ggplot(data = train, aes(log(train$V15))) +
+geom_histogram(col = "blue", fill = "orange", alpha = 0.2) +
+labs(title = "Histograma las perras de la gente", y = "Count")
+show(myhist)
+
+countZeros <- sum(train$V15 == 0)
+```
+
+
+```{r}
+myhist <- ggplot(data = train, aes(log(train$V15))) +
+geom_histogram(col = "blue", fill = "orange", alpha = 0.2) +
+labs(title = "Histograma las perras de la gente", y = "Count")
+show(myhist)
+```
+
+```{r}
+colnames(credit)[colnames(credit) == "V2"] ="Edad"
+colnames(credit)[colnames(credit) == "V10"] ="Trabaja"
+colnames(credit)[colnames(credit) == "V11"] ="Meses_Trabajo"
+colnames(credit)[colnames(credit) == "V16"] ="Credito"
+summary(credit)
+```
+
+9 10 y 12 son true false
+```{r}
+# show(credit[credit$V2<19 & credit$V2>=18 & credit$V16=='+',])
+show(credit[credit$Trabaja=='f' & credit$Credito=='+',])
+```
+
+```{r}
+
+```
