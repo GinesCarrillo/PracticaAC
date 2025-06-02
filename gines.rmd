@@ -38,11 +38,6 @@ En total, se han probado cuatro algoritmos representativos de distintos paradigm
 automático. 
 
 # Carga y preparación de datos
-------------------------------------JUANDI-------------------------
-
-
-
-
 
 ```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 
@@ -145,7 +140,7 @@ lapply(credit[campos_categoricos], FUN = levels)
 Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t"
 
 ```{r}
-levels(credit$Estado_civil) <- c(levels(credit$Estado_civil), "t")
+levels(credit$Estado_civil) <- c(levels(credit$$Estado_civil), "t")
 ```
 
 Tras estas modificaciones, podemos comprobar que nuestro dataset cuenta con 690 muestras de 16 variables.
@@ -194,47 +189,35 @@ con la distribución que siguen dichos atributos.
 
 ```{r}
 
+variables <- c("Edad", "Deuda", "AnosCotizados", "Calificacion_crediticia", "Codigo_postal", "Ingresos")
 
 # Crear una lista para guardar los histogramas
 plots <- list()
 
-for (i in campos_numericos) {
-  var <- names(credit)[i]
+for (var in variables) {
   var_data <- na.omit(credit[[var]])
-# Saltar si la columna no tiene datos suficientes
+  mediana <- median(var_data)
+  media <- mean(var_data)
+  q1 <- quantile(var_data, 0.25)
+  q3 <- quantile(var_data, 0.75)
 
-  if (length(var_data) < 2) next
-  df_temp <- data.frame(valor = var_data)
-  
-  p <- ggplot(df_temp, aes(x = valor)) +
+  p <- ggplot(var_data, aes_string(x = var)) +
     geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    geom_vline(xintercept = mediana, color = "red", linetype = "solid", size = 1) +
+    geom_vline(xintercept = q1, color = "darkgreen", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = q3, color = "darkgreen", linetype = "dashed", size = 1) +
     ggtitle(var) +
     theme_minimal()
   
   plots[[var]] <- p
 }
 
-# Mostrar los histogramas si hay alguno válido
-if (length(plots) > 0) {
-  grid.arrange(grobs = plots, ncol = 3)
-} else {
-  cat("No hay suficientes datos para mostrar los histogramas.\n")
-}
+# Mostrar todos los histogramas en una cuadrícula 2x3
+grid.arrange(grobs = plots, ncol = 3)
 ```
 
-Claramente hay variables como la de Ingresos o Calificacion_crediticia 
 
 ### Atributos categóricos
------------------------YAGO----------------------------------------------------
-
-
-
-
-
-
-
-
-
 
 
 ```{r eda-uni}
