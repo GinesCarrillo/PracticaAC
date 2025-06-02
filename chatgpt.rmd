@@ -134,7 +134,7 @@ Algunos campos numéricos conviene visualizarlos en escala logarítmica.
 ```{r}
 campos = 1:15
 campos_numericos = c(2, 3, 8, 11, 14, 15)
-campos_log = c(8, 11, 14, 15)
+campos_log = c(8, 11, 15)
 campos_no_log = setdiff(campos_numericos, campos_log)
 campos_categoricos = setdiff(campos, campos_numericos)
 #campos_categoricos = c("Sexo", "Estado_civil", "Es_cliente", "Nivel_educativo", "Etnia", "Impago_previo", "Trabaja", "Licenc", "Ciudadano", "Aprobado") #nolint
@@ -202,7 +202,6 @@ for (i in campos_numericos) {
   var <- names(credit)[i]
   var_data <- na.omit(credit[[var]])
 # Saltar si la columna no tiene datos suficientes
-
   if (length(var_data) < 2) next
   df_temp <- data.frame(valor = var_data)
   
@@ -214,15 +213,122 @@ for (i in campos_numericos) {
   plots[[var]] <- p
 }
 
-# Mostrar los histogramas si hay alguno válido
-if (length(plots) > 0) {
-  grid.arrange(grobs = plots, ncol = 3)
-} else {
-  cat("No hay suficientes datos para mostrar los histogramas.\n")
-}
+grid.arrange(grobs = plots, ncol = 3)
+
 ```
 
-Claramente hay variables como la de Ingresos o Calificacion_crediticia 
+Claramente hay variables como la de Ingresos o Calificacion_crediticia que pierden
+mucha información al representarse con el histograma. Utilizando escala logarítmica se puede distinguir mejor la población:
+
+```{r}
+
+
+# Crear una lista para guardar los histogramas
+plots <- list()
+
+for (i in campos_log) {
+    var <- names(credit)[i]
+    var_data <- na.omit(credit[[var]])
+    # Saltar si la columna no tiene datos suficientes o si hay valores no positivos
+    var_data_log <- var_data[var_data > 0]
+    if (length(var_data_log) < 2) next
+    df_temp <- data.frame(valor = log(var_data_log))
+    
+    p <- ggplot(df_temp, aes(x = valor)) +
+        geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+        ggtitle(paste0(var, " (log)")) +
+        theme_minimal()
+    
+    plots[[var]] <- p
+}
+
+grid.arrange(grobs = plots, ncol = 3)
+
+```
+
+En el caso del atributo Calificacion_crediticia, vemos que hay una gran cantidad de
+muestras que tienen el valor 0 en este campo. Esto se puede deber a que el banco no
+conoce este dato o bien que la mayor parte de la gente acaba de abrirse la cuenta del banco
+y de momento no tiene una calificación crediticia positiva. 
+
+También vemos una cantidad elevado de personas con cero ingresos. Igual que en el caso anterior, 
+seguramente se deba a desconocimiento del valor, pues no es frecuente que una cantidad tan elevada de 
+la población tenga 0 ingresos.
+
+Ahora queremos comprobar si alguno de los atributos sigue una distribución normal.
+Para ello utilizamos qqplot para comparar la función de distribución de nuestros atributos con la de la distribución normal:
+```{r}
+
+library(ggplot2)
+library(gridExtra)
+
+# Lista para guardar los Q-Q plots
+qqplots <- list()
+
+for (i in campos_numericos) {
+  var <- names(credit)[i]
+  var_data <- na.omit(credit[[i]])
+
+  # Saltar si hay pocos datos
+  if (length(var_data) < 3) next
+
+  df_temp <- data.frame(valor = var_data)
+
+  # Q-Q plot usando stat_qq
+  p <- ggplot(df_temp, aes(sample = valor)) +
+    stat_qq() +
+    stat_qq_line(color = "red") +
+    ggtitle(paste("Q-Q plot de", var)) +
+    theme_minimal()
+
+  qqplots[[var]] <- p
+}
+
+# Mostrar todos los Q-Q plots en una cuadrícula
+grid.arrange(grobs = qqplots, ncol = 3)
+
+```
+
+Llegamos a la conclusión de que ninguno de los atributos sigue una distribución normal.
+
+La que más se acerca sería la del código postal. Esto podría tener cierto sentido debido a que la mayor parte de los solicitantes 
+vivirán cerca del banco en cuestión. Teniendo en cuenta que lugares cercanos suelen tener códigos postales próximos, tiene mucho
+sentido que cuanto más nos alejamos del banco (y por consecuente de su código postal), menos solicitantes habrá. 
+
+Siguiendo el razonamiento anterior, parece convenienente comprobar si las variables que anteriormente visualizamos en escala logarítmica,
+siguen una distribución lognormal. Para ello simplemente repetimos el procedimiento anterior con las variables tras aplicarle el logaritmo:
+
+```{r}
+
+library(ggplot2)
+library(gridExtra)
+
+# Lista para guardar los Q-Q plots
+qqplots <- list()
+
+for (i in campos_log) {
+  var <- names(credit)[i]
+  var_data <- na.omit(credit[[var]])
+# Saltar si la columna no tiene datos suficientes o si hay valores no positivos
+  var_data_log <- var_data[var_data > 0]
+  if (length(var_data_log) < 2) next
+  df_temp <- data.frame(valor = log(var_data_log))
+
+
+  # Q-Q plot usando stat_qq
+  p <- ggplot(df_temp, aes(sample = valor)) +
+    stat_qq() +
+    stat_qq_line(color = "red") +
+    ggtitle(paste("Q-Q plot de", var)) +
+    theme_minimal()
+
+  qqplots[[var]] <- p
+}
+
+# Mostrar todos los Q-Q plots en una cuadrícula
+grid.arrange(grobs = qqplots, ncol = 3)
+
+```
 
 ### Atributos categóricos
 -----------------------YAGO----------------------------------------------------
