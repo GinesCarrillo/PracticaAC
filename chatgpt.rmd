@@ -12,37 +12,42 @@ output:
 
 # Introducción
 
-Este documento es la memoria de nuestra práctica para la asignatura Aprendizaje Computacional de la Mención en Computación del Grado de Informática
+Este documento es la memoria de nuestra práctica para la asignatura *Aprendizaje Computacional* de la Mención en Computación del Grado de Informática
 de la Universidad de Murcia.
 
-El proyecto consiste en un estudio de diferentes modelos de aprendizaje automático. Para ello, se ha utilizado la base de datos
+El proyecto consiste en el estudio de diferentes modelos de aprendizaje automático. Para ello, se ha utilizado la base de datos
 [Credit Approval](https://archive.ics.uci.edu/dataset/27/credit+approval) de 
 [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/), 
 que contiene información sobre la concesión o denegación de créditos bancarios.
 
-En primer lugar, se ha llevado a cabo un estudio de la base de datos. Hemos identificado atributos numéricos y categóricos y hemos 
-renombrado
+En primer lugar, se ha llevado a cabo un análisis exploratorio de la base de datos. 
+Hemos identificado atributos numéricos y categóricos y hemos renombrado
 las columnas según la información que hemos encontrado en un repositorio de 
 [Kaggle](https://www.kaggle.com/code/dilipkumarb/credit-card-approval-classification-model).
-Hemos proseguido con una serie de análisis monovariable y multivariable discriminando entre créditos concecidos y denegados.
+Hemos proseguido con una serie de análisis monovariable y multivariable discriminando entre créditos concedidos y denegados.
 Esto nos ha permitido hacernos una idea de la relación entre los diferentes atributos.
 Para cerrar esta sección, hemos probado un Análisis de Componentes Principales (PCA) para tener una referencia
 sencilla con la que comparar los modelos de aprendizaje.
 
-Después del análisis hemos provado diversos modelos de clasificación 
-supervisada utilizando el lenguaje R y la librería caret, aplicando técnicas 
+Después del análisis, hemos probado diversos modelos de clasificación 
+supervisada utilizando el lenguaje R y la librería **caret**, aplicando técnicas 
 de preprocesado, ajuste de hiperparámetros (((y evaluación cruzada))). 
-El dataset se ha dividido en datos de entrenamiento y datos de test para
+El dataset se ha dividido en **datos de entrenamiento** y **datos de test** para
 comprobar la eficacia de los modelos.
 En total, se han probado cuatro algoritmos representativos de distintos paradigmas de aprendizaje
 automático. 
 
 # Carga y preparación de datos
-------------------------------------JUANDI-------------------------
 
+Comenzamos instalando las librerías de R necesarias para la elaboración de la práctica:
+ - caret (Classification And REgresion Training): paquete para entrenar modelos de machine learning en R. Facilita, entre otros, el preprocesado de datos, la división de conjuntos de train/test, el ajuste de hiperparámetros...
+ - tidyverse: colección de paquetes para ciencia de datos. Permite manipulación de datos, lectura de archivos y creación de gráficos.
+ - ggplot2: creación de gráficos.
+ - gridExtra: permite combinar varios ggplot en una sola figura.
 
-
-
+También cargamos el [dataset](https://archive.ics.uci.edu/static/public/27/credit+approval.zip) y vemos su contenido.
+Observamos una tabla de 690 filas y 16 columnas. Las columnas `V1`, `V4`, `V5`, `V6`, `V7`, `V9`, `V10`, `V12`, `V13` y `V16` contienen caracteres,
+lo que nos indica que son categóricas. El resto de columnas son numéricas.
 
 ```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 
@@ -59,12 +64,16 @@ if (!requireNamespace("ggplot2", quietly = TRUE)) {
 if (!requireNamespace("gridExtra", quietly = TRUE)) {
     install.packages("gridExtra")
 }
+if (!requireNamespace("GGally", quietly = TRUE)) {
+    install.packages("GGally")
+}
 
 
 library(caret)
 library(tidyverse)
 library(ggplot2)
 library(gridExtra)
+library(GGally)
 
 # Cargar dataset
 url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
@@ -80,34 +89,30 @@ credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
 summary(credit)
 ```
 
-Explica brevemente cuántos datos hay en cada conjunto y cómo se han identificado los valores ausentes.
-
 # Análisis Exploratorio de Datos (EDA)
 
 La primera labor que debemos llevar a cabo al empezar a trabajar con un dataset desconocido es entender la información 
 que este contiene. En esta fase, conocida como Análisis Exploratorio de Datos, llevaremos a cabo las siguientes tareas:
-- Etiquetado de los atributos:
+- **Etiquetado de los atributos**:
     en vista de la ausencia de etiquetas interpretables para los atributos del dataset, en esta primera etapa hemos buscado
     entender el significado de cada uno de ellos y renombrarlos de manera más intuitiva.
-- Análisis monovariable:
+- **Análisis monovariable**:
     a continuación, hemos analizado las distribuciones seguidas por cada uno de los atributos, estudiando también sus valores 
     máximos, mínimos, medias y cuartiles.
-- Analísis multivariable:
+- **Analísis multivariable**:
     finalmente, hemos realizado un estudio de cómo distintos atributos se relacionan entre sí.
-
-
 
 ## Etiquetado de los atributos
 
-En un primer momento, intentamos averiguar los significados de los campos de forma manual. Conseguimos deducir que la Variable V2 
-representa la edad del solicitante percatándonos de que los decimales correspondían con múltiplos de 1/12, es decir, el valor 34.083 se corresponde con la edad de 34 años y 1 mes.
+En un primer momento, intentamos averiguar los significados de los campos de forma manual. Conseguimos deducir que el atributo '`V2` 
+representa la edad del solicitante, percatándonos de que los decimales correspondían con múltiplos de 1/12 (por ejemplo, el valor 34.083 se corresponde con la edad de 34 años y 1 mes).
 
-Otro campo que pudimos deducir fue el de Ingresos, basándonos en la distribución que tomaban sus valores (y que veremos más adelante).
+Otro campo que pudimos deducir fue el de Ingresos (`V15`), basándonos en la distribución que tomaban sus valores (y que veremos más adelante).
 
 Finalmente, decidimos investigar en foros online para buscar el significado del resto de atributos. Ahí es cuando encontramos
 el siguiente proyecto de [Kaggle](https://www.kaggle.com/code/dilipkumarb/credit-card-approval-classification-model).
 
-Con esta información, hi renombrado:
+Con esta información, renombramos las columnas:
 ```{r}
 colnames(credit)[colnames(credit) == "V1"] ="Sexo"
 colnames(credit)[colnames(credit) == "V2"] ="Edad"
@@ -127,7 +132,6 @@ colnames(credit)[colnames(credit) == "V15"] ="Ingresos"
 colnames(credit)[colnames(credit) == "V16"] ="Aprobado"
 ```
 
-
 También distinguimos entre campos categóricos y numéricos. Los datos categóricos se deben tratar como el tipo factor.
 Algunos campos numéricos conviene visualizarlos en escala logarítmica.
 
@@ -142,13 +146,11 @@ credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor
 lapply(credit[campos_categoricos], FUN = levels)
 ```
 
-Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t"
+Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t".
 
 ```{r}
 levels(credit$Estado_civil) <- c(levels(credit$Estado_civil), "t")
 ```
-
-Tras estas modificaciones, podemos comprobar que nuestro dataset cuenta con 690 muestras de 16 variables.
 
 Para c
 da uno de los predictores categóricos, hemos  rep
@@ -349,8 +351,34 @@ grid.arrange(grobs = qqplots, ncol = 3)
 
 ## Análisis multivariable
 
+Analizar todas las posibles agrupaciones de atributos sería una tarea inabarcable.
+Al contar con 16 de los mismos, existen un total de 2^16^ = 65536 combinaciones de conjuntos.
+Es por ello que incluimos solo análisis de grupos de atributos que consideramos que pueden tener importancia.
+
+Los objetivos del análisis multivariable es detectar patrones complejos no visibles en análisis univariantes.
+Nos puede servir posteriormente para reducir dimensiones o justificar otras decisiones de preprocesado.
+
+### Grid de variables numéricas
+
+Utilizando un **pairwise correlation plot** con la función del paquete GGally vamos a visualizar las relaciones entre todos los pares de variables numéricas.
+Distinguimos entre créditos aprobados (azul) y denegados (rojo). No incluimos el código postal ya que no es un valor que mantenga un concepto de escala.
+
 ```{r eda-multi}
-# Gráficos de facetas, tablas cruzadas, visualización de clase vs predictores
+
+  # Subconjunto con las variables numéricas
+  subset_credit <- credit[, c("Edad", "Deuda", "Anos_cotizados", "Calificacion_crediticia", "Aprobado")]
+  subset_credit$Deuda <- log10(subset_credit$Deuda + 1)
+  subset_credit$Anos_cotizados <- log10(subset_credit$Anos_cotizados + 1)
+  subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
+
+  # Graficar con color por clase
+  x11()
+  ggpairs(subset_credit,
+          mapping = aes(color = Aprobado, alpha = 0.5),
+          columns = 1:4,
+          upper = list(continuous = wrap("cor", size = 4)),
+          title = "Relaciones entre atributos numéricos")
+
 ```
 
 # Preprocesado de datos
