@@ -280,7 +280,7 @@ for (i in campos_numericos) {
   p <- ggplot(df_temp, aes(sample = valor)) +
     stat_qq() +
     stat_qq_line(color = "red") +
-    ggtitle(paste("Q-Q plot de", var)) +
+    ggtitle(paste(var)) +
     theme_minimal()
 
   qqplots[[var]] <- p
@@ -321,7 +321,7 @@ for (i in campos_log) {
   p <- ggplot(df_temp, aes(sample = valor)) +
     stat_qq() +
     stat_qq_line(color = "red") +
-    ggtitle(paste("Q-Q plot de", var)) +
+    ggtitle(paste(var)) +
     theme_minimal()
 
   qqplots[[var]] <- p
@@ -331,6 +331,188 @@ for (i in campos_log) {
 grid.arrange(grobs = qqplots, ncol = 3)
 
 ```
+Vemos que estas tres variables se ajustan mucho mejor a una distribución lognormal que a una normal.
+
+Ahora vamos a centrarnos en tres predictores en concreto: ingresos, edad y deuda.
+
+
+#### Análisis univariable del predictor `Ingresos`
+
+```{r ingresos1}
+library(ggplot2)
+
+# Eliminamos NA por seguridad
+ingresos <- na.omit(credit$Ingresos)
+
+# Estadísticos básicos
+summary(ingresos)
+sd(ingresos)
+```
+
+```{r ingresos2}
+# Histograma y Boxplot
+p1 <- ggplot(data.frame(Ingresos = ingresos), aes(x = Ingresos)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  labs(title = "Histograma de Ingresos")
+
+p2 <- ggplot(data.frame(Ingresos = ingresos), aes(y = Ingresos)) +
+  geom_boxplot(fill = "orange") +
+  labs(title = "Boxplot de Ingresos")
+
+gridExtra::grid.arrange(p1, p2, ncol = 2)
+```
+La variable Ingresos presenta una distribución altamente asimétrica, con una gran concentración de 
+valores bajos y una cola larga hacia la derecha. 
+Esto se confirma con el histograma y el boxplot, donde se observan muchos valores en cero y varios outliers.
+```{r ingresos3}
+# Test de Shapiro-Wilk para normalidad
+shapiro.test(ingresos)
+
+# Log-transformación (se suman +1 para evitar log(0))
+log_ingresos <- log(ingresos + 1)
+
+# Test de Shapiro-Wilk sobre log(Ingresos)
+shapiro.test(log_ingresos)
+
+```
+
+La prueba de Shapiro-Wilk sobre los ingresos originales da como resultado un p-valor muy bajo, 
+indicando que no siguen una distribución normal. 
+Tras aplicar una transformación logarítmica (log(Ingresos + 1)), la distribución mejora notablemente en forma, 
+aunque el p-valor obtenido sigue siendo muy bajo, lo que nos confirma que tampoco sigue una distribución lognormal.
+El Q-Q plot también muestra una mejor alineación con la recta teórica tras la transformación.
+```{r ingresos4}
+# Q-Q plot para Ingresos y log(Ingresos)
+par(mfrow = c(1,2))
+
+qqnorm(ingresos, main = "Q-Q plot Ingresos")
+qqline(ingresos, col = "red")
+
+qqnorm(log_ingresos, main = "Q-Q plot log(Ingresos)")
+qqline(log_ingresos, col = "red")
+```
+
+Nuestra siguiente intención es comprobar si este predictor sirve como una buena primera aproximación 
+para distinguir entre personas a las que se le concedió el crédito y a las que no.
+
+Para ello dividimos la población total entre aprobados y no aprobados y representamos con un boxplot cada una:
+```{r ingresos-vs-aprobado}
+# Eliminar NA
+df_ingresos <- credit[!is.na(credit$Ingresos) & !is.na(credit$Aprobado), ]
+
+# Boxplot de Ingresos por Clase
+ggplot(df_ingresos, aes(x = Aprobado, y = Ingresos, fill = Aprobado)) +
+  geom_boxplot() +
+  labs(title = "Distribución de Ingresos según Aprobado",
+       x = "Aprobado (Crédito aprobado o no)",
+       y = "Ingresos") +
+  theme_minimal()
+```
+Al ser la mayoría de valores muy cercanos a cero perdemos mucha información al visualizar la gráfica.
+No obstante sí que nos damos cuenta de que a todos los outliers (personas con ingresos muy por encima de la media)
+se les concede el crédito, lo que nos hace pensar que puede ser un buen predictor.
+
+Para visualizar mejor el boxplot, transformamos los datos a escala logaritmica:
+
+```{r ingresos-vs-aprobado2}
+  # También puedes ver la versión log-transformada (opcional)
+df_ingresos$log_ingresos <- log(df_ingresos$Ingresos + 1)
+
+ggplot(df_ingresos, aes(x = Aprobado, y = log_ingresos, fill = Aprobado)) +
+  geom_boxplot() +
+  labs(title = "Distribución log(Ingresos + 1) según Aprobado",
+       x = "Aprobado",
+       y = "log(Ingresos + 1)") +
+  theme_minimal()
+
+```
+
+En este diagrama sí que se aprecia mucho mejor que a la gente que se le concedió el crédito tiene de media muchos más 
+ingresos, confirmando así nuestra teoría.
+
+
+#### Análisis univariable del predictor `Deuda`
+```{r deuda1}
+# Eliminamos NA
+deuda <- na.omit(credit$Deuda)
+
+# Estadísticos descriptivos
+summary(deuda)
+sd(deuda)
+```
+```{r deuda2}
+
+# Histograma y Boxplot
+p1 <- ggplot(data.frame(Deuda = deuda), aes(x = Deuda)) +
+  geom_histogram(bins = 30, fill = "darkseagreen", color = "black") +
+  labs(title = "Histograma de Deuda")
+
+p2 <- ggplot(data.frame(Deuda = deuda), aes(y = Deuda)) +
+  geom_boxplot(fill = "tomato") +
+  labs(title = "Boxplot de Deuda")
+
+gridExtra::grid.arrange(p1, p2, ncol = 2)
+
+```
+
+La variable Deuda presenta una distribución asimétrica, aunque menos extrema que Ingresos.
+El histograma muestra una acumulación de valores bajos y una cola hacia la derecha. 
+El boxplot sugiere la presencia de varios valores atípicos por encima del tercer cuartil.
+```{r deuda3}
+# Prueba de normalidad
+shapiro.test(deuda)
+# Log-transformación si hay valores positivos
+log_deuda <- log(deuda + 1)
+shapiro.test(log_deuda)
+
+```
+
+Ambas pruebas de Shapiro-Wilk indican que ni Deuda ni log(Deuda + 1) siguen una distribución normal. 
+No obstante, el logaritmo ayuda a mejorar la simetría:
+```{r deuda4}
+# Q-Q plots
+par(mfrow = c(1,2))
+qqnorm(deuda, main = "Q-Q plot Deuda")
+qqline(deuda, col = "red")
+qqnorm(log_deuda, main = "Q-Q plot log(Deuda)")
+qqline(log_deuda, col = "red")
+
+```
+
+Queremos ahora ver si Deuda permite distinguir entre personas a las que se les concedió el crédito y a las que no:
+```{r deuda5}
+df_deuda <- credit[!is.na(credit$Deuda) & !is.na(credit$Aprobado), ]
+df_deuda$log_deuda <- log(df_deuda$Deuda + 1)
+
+ggplot(df_deuda, aes(x = Aprobado, y = log_deuda, fill = Aprobado)) +
+  geom_boxplot() +
+  labs(title = "Distribución log(Deuda + 1) según Aprobado",
+       x = "Aprobado",
+       y = "log(Deuda + 1)") +
+  theme_minimal()
+
+```
+
+El boxplot log-transformado permite ver que los casos aprobados tienden a tener mayor deuda, lo cual es contraintuitivo, pero puede estar relacionado con el hecho de que esas personas también tienen mayores ingresos y capacidad de pago. 
+Este comportamiento debe analizarse junto con otros predictores.
+```{r deuda6}
+ggplot(df_deuda, aes(x = Deuda, fill = Aprobado)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribución de Deuda según Aprobado",
+       x = "Deuda",
+       y = "Densidad") +
+  theme_minimal()
+
+```
+
+Este gráfico muestra que, aunque las distribuciones se solapan, el grupo aprobado presenta 
+una mayor densidad en valores altos de deuda, reforzando la idea de que tener deuda no impide ser aprobado, 
+siempre que venga acompañada de otros factores como ingresos estables.
+```{r deuda7}
+
+
+```
+
 
 ### Atributos categóricos
 -----------------------YAGO----------------------------------------------------
@@ -372,7 +554,6 @@ Distinguimos entre créditos aprobados (azul) y denegados (rojo). No incluimos e
   subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
 
   # Graficar con color por clase
-  x11()
   ggpairs(subset_credit,
           mapping = aes(color = Aprobado, alpha = 0.5),
           columns = 1:4,
@@ -382,7 +563,15 @@ Distinguimos entre créditos aprobados (azul) y denegados (rojo). No incluimos e
 ```
 
 # Preprocesado de datos
+```{r preprocessing}
+# Preprocesado 1 y preprocesado 2 para comparar más adelante
+    # Cargar índices de train
+    credit.trainIdx <- readRDS("credit.trainIdx")
 
+    # Separación de conjuntos
+    credit.Datos.Train <- credit[credit.trainIdx, ]
+    credit.Datos.Test <- credit[-credit.trainIdx, ]
+```
 – ¿Hay predictores que no tengan utilidad y ser´ıan eliminables? ¿Por y en base a qu´e?
 – ¿Qu´e predictores habr´ıa que normalizar? ¿Por qu´e? ¿Cu´al ser´ıa la estrategia de normalizaci´on en
 cada caso?
@@ -396,16 +585,126 @@ Explica qué transformaciones se han aplicado:
 - Creación/eliminación de variables
 
 ## Tratamiento de los valores nulos
+En primer lugar, veamos si hay valores nulos y cuántos hay en cada columna:
 
-```{r preprocessing}
-# Preprocesado 1 y preprocesado 2 para comparar más adelante
-    # Cargar índices de train
-    credit.trainIdx <- readRDS("credit.trainIdx")
+```{r nulos1}
+# Una sola línea para contar nulos por columna
+colSums(is.na(credit))
 
-    # Separación de conjuntos
-    credit.Datos.Train <- credit[credit.trainIdx, ]
-    credit.Datos.Test <- credit[-credit.trainIdx, ]
 ```
+
+En una gráfica podemos verlos mejor: 
+```{r nulos2}
+# Visualización de los nulos con gráfico de barras
+library(ggplot2)
+
+nulos <- colSums(is.na(credit))
+nulos_df <- data.frame(Variable = names(nulos), Nulos = nulos)
+nulos_df <- nulos_df[nulos_df$Nulos > 0, ]  # Solo mostrar columnas con nulos
+
+ggplot(nulos_df, aes(x = reorder(Variable, -Nulos), y = Nulos)) +
+  geom_bar(stat = "identity", fill = "tomato") +
+  labs(title = "Número de valores nulos por variable",
+       x = "Variable", y = "Cantidad de NA") +
+  theme_minimal() +
+  coord_flip()
+
+
+```
+Vemos que solo 7 de los atributos tienen valores nulos y además la cantidad de estos es muy pequeña (cercano al 1% en
+todos los casos).
+
+Es interesante saber cómo se distribuyen los valores nulos a lo largo de las muestras.
+Para ello vamos a ver la frecuencia del número de atributos faltantes. Ya trabajamos con los datos de Train, pues
+no debemos modificar los datos de Test a partir de ahora.
+
+```{r faltantes}
+# Número de valores NA por fila
+na_por_fila <- rowSums(is.na(credit.Datos.Train ))
+
+# Observaciones con al menos un NA
+con_na <- na_por_fila[na_por_fila > 0]
+length(con_na)  # ¿Cuántas observaciones tienen al menos un NA?
+
+# Tabla resumen
+table(con_na)
+
+# Histograma: cuántos atributos faltan por observación (entre las que tienen algún NA)
+library(ggplot2)
+
+ggplot(data.frame(Faltantes = con_na), aes(x = Faltantes)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Nº de atributos faltantes por observación",
+       x = "Cantidad de NA",
+       y = "Frecuencia") +
+  theme_minimal()
+
+```
+
+Vemos que a la mayoría de muestras con valores NA solo les falta un valor. Sin embargo, también es importante
+destacar que hay 6 muestras a las cuales les faltan 5 valores. 
+
+Como estrategia de limpieza, se han eliminado las observaciones del conjunto de entrenamiento 
+que contenían más de 4 valores nulos. Esta decisión se justifica por el hecho de que esas observaciones presentan información muy incompleta, 
+y su imputación generaría más ruido que beneficio. 
+El resto de las observaciones, con pocos valores faltantes, se conservarán y se decidirá si se inputan o no posteriormente.
+```{r faltantes2}
+# Eliminar observaciones con más de 4 atributos faltantes
+credit.Datos.Train <- credit.Datos.Train[na_por_fila <= 4, ]
+
+# Verificamos tamaño tras limpieza
+nrow(credit.Datos.Train)
+```
+
+
+
+Los valores nulos deben tratarse adecuadamente antes de entrenar modelos de aprendizaje automático. Las posibles estrategias incluyen:
+
+- Eliminación de filas: útil si el número de nulos es pequeño y su eliminación no reduce significativamente el tamaño del dataset.
+
+- Imputación por la media/mediana/moda: recomendable para variables numéricas si el porcentaje de nulos es moderado.
+
+- Imputación por valor más frecuente: útil en variables categóricas con pocos niveles.
+
+- Modelado de imputación: usar modelos predictivos (por ejemplo mice, missForest) para estimar los valores faltantes, aunque es más costoso computacionalmente.
+
+En nuestro caso, es probable que la mejor opción sea simplemente eliminar las filas con datos faltantes, pues como hemos visto en
+la gráfica anterior, hay muy pocos valores nulos en comparación con el número total de muestras que disponemos.
+
+
+
+### Creación y análisis del predictor `DeudaRelativa`
+Hemos pensado en crear la variable DeudaRelativa, que creemos que tiene más sentido que la variable Deuda,
+pues no es tan importante la deuda que tengas, sino cómo de grande es esta deuda comparada con tus ingresos.
+
+```{r crear-deuda-relativa}
+# Crear la nueva variable
+credit.Datos.Train$DeudaRelativa <- log(1 + credit.Datos.Train$Deuda / (credit.Datos.Train$Ingresos + 1))
+
+# Boxplot de DeudaRelativa según Aprobado
+ggplot(credit.Datos.Train, aes(x = Aprobado, y = DeudaRelativa, fill = Aprobado)) +
+  geom_boxplot() +
+  labs(title = "Relación Deuda / Ingresos según Aprobación",
+       x = "Aprobado",
+       y = "DeudaRelativa") +
+  theme_minimal()
+
+
+# Gráfico de densidad por clase
+ggplot(credit.Datos.Train, aes(x = DeudaRelativa, fill = Aprobado)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribución de DeudaRelativa por clase",
+       x = "DeudaRelativa",
+       y = "Densidad") +
+  theme_minimal()
+
+```
+Tanto el boxplot como la función de densidad muestran que los casos aprobados suelen tener una deuda 
+relativa menor, lo que es coherente con que los prestamistas 
+aprueben más fácilmente a quienes tienen un endeudamiento controlado respecto a sus ingresos.
+
+Durante el entrenamiento de los modelos comprobaremos si la inclusión de esta variable reporta alguna 
+mejoría respecto a usar únicamente la deuda bruta.
 
 # Modelado y entrenamiento
 
