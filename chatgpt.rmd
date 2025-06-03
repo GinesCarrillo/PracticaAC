@@ -146,7 +146,7 @@ credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor
 lapply(credit[campos_categoricos], FUN = levels)
 ```
 
-Anadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t".
+Añadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t".
 
 ```{r}
 levels(credit$Estado_civil) <- c(levels(credit$Estado_civil), "t")
@@ -545,22 +545,196 @@ Nos puede servir posteriormente para reducir dimensiones o justificar otras deci
 Utilizando un **pairwise correlation plot** con la función del paquete GGally vamos a visualizar las relaciones entre todos los pares de variables numéricas.
 Distinguimos entre créditos aprobados (azul) y denegados (rojo). No incluimos el código postal ya que no es un valor que mantenga un concepto de escala.
 
+Dado que las variables Deuda, Anos_cotizados y Calificacion_crediticia presentan distribuciones muy sesgadas hacia valores bajos, aplicamos una transformación logarítmica.
+Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones lineales.
+
 ```{r eda-multi}
 
+# Función para mostrar R^2 en los paneles superiores
+  cor_plus_r2_fun <- function(data, mapping, ...) {
+    x <- eval_data_col(data, mapping$x)
+    y <- eval_data_col(data, mapping$y)
+    class_var <- data$Aprobado  # Asumimos que la clase es esta
+    
+    df <- data.frame(x = x, y = y, clase = class_var)
+    df <- df[complete.cases(df), ]
+
+    # Correlaciones
+    r_total <- cor(df$x, df$y)
+    r_plus  <- tryCatch(cor(df$x[df$clase == "+"], df$y[df$clase == "+"]), error = function(e) NA)
+    r_minus <- tryCatch(cor(df$x[df$clase == "-"], df$y[df$clase == "-"]), error = function(e) NA)
+
+    # R² global
+    r2 <- tryCatch(summary(lm(y ~ x, data = df))$r.squared, error = function(e) NA)
+
+    # Formato
+    txt <- paste0(
+      "Corr: ", sprintf("%.3f", r_total), "\n",
+      "-: ", sprintf("%.3f", r_minus), "\n",
+      "+: ", sprintf("%.3f", r_plus), "\n",
+      "R²: ", sprintf("%.3f", r2)
+    )
+
+    ggplot(data = df, aes(x = x, y = y)) +
+      annotate("text", x = median(df$x, na.rm = TRUE), y = median(df$y, na.rm = TRUE),
+              label = txt, size = 3.5, hjust = 0.5) +
+      theme_void()
+  }
+
   # Subconjunto con las variables numéricas
-  subset_credit <- credit[, c("Edad", "Deuda", "Anos_cotizados", "Calificacion_crediticia", "Aprobado")]
+  subset_credit <- credit[, c("Edad", "Deuda", "Anos_cotizados", "Calificacion_crediticia", "Ingresos", "Aprobado")]
   subset_credit$Deuda <- log10(subset_credit$Deuda + 1)
   subset_credit$Anos_cotizados <- log10(subset_credit$Anos_cotizados + 1)
+  subset_credit$Ingresos <- log10(subset_credit$Ingresos + 1)
   subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
 
+  x11()
   # Graficar con color por clase
   ggpairs(subset_credit,
           mapping = aes(color = Aprobado, alpha = 0.5),
-          columns = 1:4,
-          upper = list(continuous = wrap("cor", size = 4)),
+          columns = 1:5,
+          upper = list(continuous = cor_plus_r2_fun),
+          lower = list(continuous = wrap("points", alpha = 0.4)),
           title = "Relaciones entre atributos numéricos")
 
 ```
+
+Como puede observarse en la matriz de correlaciones, la diagonal corresponde a las distribuciones marginales que mostrábamos en el análisis monovariable.
+El triángulo inferior contiene los diagramas de dispersión para cada par de variables y clase (aprovado o denegado).
+Por último, el triángulo superior derecho contiene los coeficientes de correlación de Pearson, tanto de las distribuciones globales
+como las separadas por clase.
+
+Las correlaciones son, en su mayoría, positivas y de pequeña magnitud.
+Tiene sentido, por ejemplo, que a mayor edad tenga una persona, más larga sea su vida laboral.
+Estas correlaciones son más intensas en la clase `+`. Esto suguiere que los
+casos aprobados siguen patrones más regulares. 
+En el caso de la relación `Edad`-`Anos_cotizados`, podríamos interpretar que a la hora de
+la concesión de un crédito a una persona joven, se es mas laxo con una vida laboral más corta.
+No obstante, si nos fijamos en los gráficos de dispersión y en el R^2^, podemos concluir que los
+datos no son los idóneos para una regresión lineal.
+
+Como separador, el par `Edad`-`Deuda` es el peor de todos, ya que las distribuciones de ambas clases se solapan demasiado. 
+Todos los pares en los que aparece la calificación crediticia son buenas elecciones de separadores;
+no por ser un buen par, sino que como discutimos en el análisis monovariable, la calificación crediticia es en sí misma un buen separador.
+El par `Deuda`-`Anos_cotizados` es quizá el mejor separador bidimensional de la tabla.
+Se puede apreciar que un corte diagonal (recta y=1.5-x) se consigue una buena separación de los puntos rojos y azules. 
+
+```{r}
+subset_credit$Esfuerzo_financiero <- subset_credit$Deuda + subset_credit$Anos_cotizados
+
+x11()
+ggplot(subset_credit, aes(x = Esfuerzo_financiero, fill = Aprobado)) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Distribución del índice combinado log10(Deuda+1) + log10(Años cotizados+1)",
+       x = "Índice esfuerzo financiero", y = "Densidad")
+      
+```
+
+Hemos llamado a la suma de ambos atributos (en escala logarítmica) `Esfuerzo_financiero`.
+La distribución marginal de este nuevo valor tiende a valores cercanos a cero en el caso de los 
+créditos denegados y a una distribución simétrica centrada a la mitad del eje.
+A pesar del solapamiento, el patrón sugiere que este nuevo atributo podría tener valor como variable
+predictiva. Podría ser interesante como incorporación a los modelos de aprendizaje.
+
+### Relaciones del índice crediticio
+
+La calificación crediticia es, a priori, el mejor clasificador monovariable.
+No obstante, sigue habiendo unos pocos casos en los que una calificación alta no implica la concesión del crédito.
+En esta subsección vamos a intentar encontrar cuáles son las variables que determinan la concesión del crédito 
+en los casos de un índice crediticio alto.
+
+Para empezar, filtramos el dataset para contener únicamente información sobre los créditos en los que el solicitante
+tiene un índice crediticio superior a 3.
+
+```{r}
+  credit_alto <- subset(credit, Calificacion_crediticia > 3)
+  summary(credit_alto)
+```
+
+El resultado es una tabla de 151 entradas.
+El perfil medio de estas solicitudes, más allá de la calificación crediticia, se deferencia
+del perfil general en cuatro ámbitos:
+- Todos tienen un puestro de trabajo.
+- La deuda es mayor (6.739 vs 4.759 de media).
+- Más años cotizados (1 en el primer cuartil vs 0.165).
+- Más ingresos (540 vs 5 de media).
+
+Si repetimos la matriz de correlaciones para este dataset:
+
+```{r eda-multi}
+
+# Función para mostrar R^2 en los paneles superiores
+  cor_plus_r2_fun <- function(data, mapping, ...) {
+    x <- eval_data_col(data, mapping$x)
+    y <- eval_data_col(data, mapping$y)
+    class_var <- data$Aprobado  # Asumimos que la clase es esta
+    
+    df <- data.frame(x = x, y = y, clase = class_var)
+    df <- df[complete.cases(df), ]
+
+    # Correlaciones
+    r_total <- cor(df$x, df$y)
+    r_plus  <- tryCatch(cor(df$x[df$clase == "+"], df$y[df$clase == "+"]), error = function(e) NA)
+    r_minus <- tryCatch(cor(df$x[df$clase == "-"], df$y[df$clase == "-"]), error = function(e) NA)
+
+    # R² global
+    r2 <- tryCatch(summary(lm(y ~ x, data = df))$r.squared, error = function(e) NA)
+
+    # Formato
+    txt <- paste0(
+      "Corr: ", sprintf("%.3f", r_total), "\n",
+      "-: ", sprintf("%.3f", r_minus), "\n",
+      "+: ", sprintf("%.3f", r_plus), "\n",
+      "R²: ", sprintf("%.3f", r2)
+    )
+
+    ggplot(data = df, aes(x = x, y = y)) +
+      annotate("text", x = median(df$x, na.rm = TRUE), y = median(df$y, na.rm = TRUE),
+              label = txt, size = 3.5, hjust = 0.5) +
+      theme_void()
+  }
+
+  # Subconjunto con las variables numéricas
+  subset_credit <- credit_alto[, c("Edad", "Deuda", "Anos_cotizados", "Calificacion_crediticia", "Ingresos", "Aprobado")]
+  subset_credit$Deuda <- log10(subset_credit$Deuda + 1)
+  subset_credit$Anos_cotizados <- log10(subset_credit$Anos_cotizados + 1)
+  subset_credit$Ingresos <- log10(subset_credit$Ingresos + 1)
+  subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
+
+  x11()
+  # Graficar con color por clase
+  ggpairs(subset_credit,
+          mapping = aes(color = Aprobado, alpha = 0.5),
+          columns = 1:5,
+          upper = list(continuous = cor_plus_r2_fun),
+          lower = list(continuous = wrap("points", alpha = 0.4)),
+          title = "Relaciones entre atributos numéricos con alta Calificacion_crediticia")
+
+```
+
+los resultados obtenidos sugieren que los ingresos del solicitante son un factor clave en la concesión o no del crédito,
+resultando en una denegación aquellos perfiles con unos ingresos cercanos a 10 unidades. 
+También destaca la diferencia entre una deuda alta y baja. De hecho, si normalizamos la escala de la los ingresos para que abarquen
+sumamos la diferencia de los ingresos con respecto a la moda 10 con el campo `Anos_cotizados` (escalando el primer valor para compartir rango),
+el resultado es la siguiente distribución:
+
+```{r}
+subset_credit$Esfuerzo_financiero <- abs(subset_credit$Ingresos-1)*0.375 + subset_credit$Anos_cotizados
+
+x11()
+ggplot(subset_credit, aes(x = Esfuerzo_financiero, fill = Aprobado)) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Distribución del índice combinado log10(Deuda+1) + log10(Años cotizados+1)",
+       x = "Índice esfuerzo financiero", y = "Densidad")
+      
+```
+
+
+
+
+
 
 # Preprocesado de datos
 ```{r preprocessing}
@@ -572,6 +746,10 @@ Distinguimos entre créditos aprobados (azul) y denegados (rojo). No incluimos e
     credit.Datos.Train <- credit[credit.trainIdx, ]
     credit.Datos.Test <- credit[-credit.trainIdx, ]
 ```
+
+
+
+
 – ¿Hay predictores que no tengan utilidad y ser´ıan eliminables? ¿Por y en base a qu´e?
 – ¿Qu´e predictores habr´ıa que normalizar? ¿Por qu´e? ¿Cu´al ser´ıa la estrategia de normalizaci´on en
 cada caso?
