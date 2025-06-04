@@ -430,6 +430,18 @@ ggplot(df_ingresos, aes(x = Aprobado, y = log_ingresos, fill = Aprobado)) +
 En este diagrama sí que se aprecia mucho mejor que a la gente que se le concedió el crédito tiene de media muchos más 
 ingresos, confirmando así nuestra teoría.
 
+Podemos mostrar también las funciones de densidad para cada una de las clases, en escala logarítmica para una mejor 
+visualización:
+
+```{r ingresos-vs-aprobado3}
+ggplot(df_ingresos, aes(x = log_ingresos, fill = Aprobado)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribución de log(Ingresos+1) según Aprobado",
+       x = "log(Ingresos+1)",
+       y = "Densidad") +
+  theme_minimal()
+
+```
 
 #### Análisis univariable del predictor `Deuda`
 ```{r deuda1}
@@ -508,7 +520,19 @@ ggplot(df_deuda, aes(x = Deuda, fill = Aprobado)) +
 Este gráfico muestra que, aunque las distribuciones se solapan, el grupo aprobado presenta 
 una mayor densidad en valores altos de deuda, reforzando la idea de que tener deuda no impide ser aprobado, 
 siempre que venga acompañada de otros factores como ingresos estables.
+
+Podemos verlo en escala logarítmica de manera más evidente:
 ```{r deuda7}
+ggplot(df_deuda, aes(x = log_deuda, fill = Aprobado)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribución de Deuda según Aprobado",
+       x = "Deuda",
+       y = "Densidad") +
+  theme_minimal()
+
+```
+
+```{r deuda8}
 
 
 ```
@@ -588,7 +612,7 @@ Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones l
   subset_credit$Ingresos <- log10(subset_credit$Ingresos + 1)
   subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
 
-  x11()
+  
   # Graficar con color por clase
   ggpairs(subset_credit,
           mapping = aes(color = Aprobado, alpha = 0.5),
@@ -617,21 +641,22 @@ Como separador, el par `Edad`-`Deuda` es el peor de todos, ya que las distribuci
 Todos los pares en los que aparece la calificación crediticia son buenas elecciones de separadores;
 no por ser un buen par, sino que como discutimos en el análisis monovariable, la calificación crediticia es en sí misma un buen separador.
 El par `Deuda`-`Anos_cotizados` es quizá el mejor separador bidimensional de la tabla.
-Se puede apreciar que un corte diagonal (recta y=1.5-x) se consigue una buena separación de los puntos rojos y azules. 
+Se puede apreciar que un corte diagonal (recta y=1.5-x) se consigue una buena separación de los puntos rojos y azules.
 
 ```{r}
-subset_credit$Esfuerzo_financiero <- subset_credit$Deuda + subset_credit$Anos_cotizados
+subset_credit$Esfuerzo_financiero <- subset_credit$Deuda + subset_credit$Anos_cotizados  + abs(subset_credit$Ingresos-1)*0.375
 
-x11()
+
 ggplot(subset_credit, aes(x = Esfuerzo_financiero, fill = Aprobado)) +
   geom_density(alpha = 0.5) +
   theme_minimal() +
-  labs(title = "Distribución del índice combinado log10(Deuda+1) + log10(Años cotizados+1)",
+  labs(title = "Distribución del índice combinado log10(Deuda+1) + log10(Años cotizados+1) + |Igresos-1|*0.375" ,
        x = "Índice esfuerzo financiero", y = "Densidad")
       
 ```
 
-Hemos llamado a la suma de ambos atributos (en escala logarítmica) `Esfuerzo_financiero`.
+Hemos llamado a la suma de ambos atributos (en escala logarítmica) mas el término
+|Ingresos-1|*0.375 `Esfuerzo_financiero`.
 La distribución marginal de este nuevo valor tiende a valores cercanos a cero en el caso de los 
 créditos denegados y a una distribución simétrica centrada a la mitad del eje.
 A pesar del solapamiento, el patrón sugiere que este nuevo atributo podría tener valor como variable
@@ -662,7 +687,7 @@ del perfil general en cuatro ámbitos:
 
 Si repetimos la matriz de correlaciones para este dataset:
 
-```{r eda-multi}
+```{r eda-multi2}
 
 # Función para mostrar R^2 en los paneles superiores
   cor_plus_r2_fun <- function(data, mapping, ...) {
@@ -702,7 +727,7 @@ Si repetimos la matriz de correlaciones para este dataset:
   subset_credit$Ingresos <- log10(subset_credit$Ingresos + 1)
   subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
 
-  x11()
+  
   # Graficar con color por clase
   ggpairs(subset_credit,
           mapping = aes(color = Aprobado, alpha = 0.5),
@@ -715,21 +740,56 @@ Si repetimos la matriz de correlaciones para este dataset:
 
 los resultados obtenidos sugieren que los ingresos del solicitante son un factor clave en la concesión o no del crédito,
 resultando en una denegación aquellos perfiles con unos ingresos cercanos a 10 unidades. 
-También destaca la diferencia entre una deuda alta y baja. De hecho, si normalizamos la escala de la los ingresos para que abarquen
-sumamos la diferencia de los ingresos con respecto a la moda 10 con el campo `Anos_cotizados` (escalando el primer valor para compartir rango),
-el resultado es la siguiente distribución:
+También destaca la diferencia entre una deuda alta y baja. De hecho, si utilizamos el `Esfuerzo_financiero` que hemos definido antes
+obtenemos el siguiente resultado:
 
 ```{r}
-subset_credit$Esfuerzo_financiero <- abs(subset_credit$Ingresos-1)*0.375 + subset_credit$Anos_cotizados
+subset_credit$Esfuerzo_financiero <- abs(subset_credit$Ingresos-1)*0.375 + subset_credit$Anos_cotizados + subset_credit$Deuda
 
-x11()
+
 ggplot(subset_credit, aes(x = Esfuerzo_financiero, fill = Aprobado)) +
   geom_density(alpha = 0.5) +
   theme_minimal() +
-  labs(title = "Distribución del índice combinado log10(Deuda+1) + log10(Años cotizados+1)",
+  labs(title = "Distribución log10(Deuda+1) + log10(Años cotizados+1) + |Ingresos-1|*0.375",
        x = "Índice esfuerzo financiero", y = "Densidad")
       
 ```
+
+La separación es aún mejor que en el caso general. Podemos ver el rendimiento de este predictor para este subdataset:
+
+```{r}
+  subset_credit$Prediccion_simple <- ifelse(subset_credit$Esfuerzo_financiero > 1.6, "+", "-")
+  table(Real = subset_credit$Aprobado, Predicho = subset_credit$Prediccion_simple)
+  
+  library(ggplot2)
+  library(dplyr)
+
+  # Crear tabla de confusión en formato largo
+  conf_mat <- table(Real = subset_credit$Aprobado, Predicho = subset_credit$Prediccion_simple)
+  conf_df <- as.data.frame(conf_mat)
+
+  # Añadir etiquetas
+  conf_df <- conf_df %>%
+    mutate(Tipo = case_when(
+      Real == "+" & Predicho == "+" ~ "Verdadero Positivo",
+      Real == "-" & Predicho == "+" ~ "Falso Positivo",
+      Real == "-" & Predicho == "-" ~ "Verdadero Negativo",
+      Real == "+" & Predicho == "-" ~ "Falso Negativo"
+    ))
+
+  
+  # Gráfico
+  ggplot(conf_df, aes(x = Predicho, y = Real, fill = Freq)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(Freq, "\n", Tipo)), size = 4) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    labs(title = "Matriz de confusión para predictor basado en esfuerzo financiero",
+        x = "Predicción", y = "Clase real", fill = "Frecuencia") +
+    theme_minimal()
+
+
+```
+
 
 
 
@@ -877,6 +937,8 @@ ggplot(credit.Datos.Train, aes(x = DeudaRelativa, fill = Aprobado)) +
   theme_minimal()
 
 ```
+
+
 Tanto el boxplot como la función de densidad muestran que los casos aprobados suelen tener una deuda 
 relativa menor, lo que es coherente con que los prestamistas 
 aprueben más fácilmente a quienes tienen un endeudamiento controlado respecto a sus ingresos.
