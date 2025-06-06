@@ -52,20 +52,20 @@ lo que nos indica que son categóricas. El resto de columnas son numéricas.
 ```{r setup, include=TRUE, message=FALSE, warning=FALSE}
 
 if (!requireNamespace("caret", quietly = TRUE)) {
-    install.packages("caret")
+  install.packages("caret")
 }
 
 if (!requireNamespace("tidyverse", quietly = TRUE)) {
-    install.packages("tidyverse")
+  install.packages("tidyverse")
 }
 if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    install.packages("ggplot2")
+  install.packages("ggplot2")
 }
 if (!requireNamespace("gridExtra", quietly = TRUE)) {
-    install.packages("gridExtra")
+  install.packages("gridExtra")
 }
 if (!requireNamespace("GGally", quietly = TRUE)) {
-    install.packages("GGally")
+  install.packages("GGally")
 }
 
 
@@ -142,8 +142,12 @@ campos_log = c(8, 11, 15)
 campos_no_log = setdiff(campos_numericos, campos_log)
 campos_categoricos = setdiff(campos, campos_numericos)
 #campos_categoricos = c("Sexo", "Estado_civil", "Es_cliente", "Nivel_educativo", "Etnia", "Impago_previo", "Trabaja", "Licenc", "Ciudadano", "Aprobado") #nolint
-credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = as.factor)
+credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = factor)
 lapply(credit[campos_categoricos], FUN = levels)
+
+#pasamos el campo aprobado también a factor y renombramos sus valores
+credit <- credit %>%
+  mutate(Aprobado = factor(Aprobado, levels = c("+", "-"), labels = c("Aprobado", "Rechazado")))
 ```
 
 Añadimos los valores que faltan que pueden tomar algunas de las variables, en este caso a la variable estado civil le falta el valor "t".
@@ -539,8 +543,93 @@ ggplot(df_deuda, aes(x = log_deuda, fill = Aprobado)) +
 
 
 ### Atributos categóricos
------------------------YAGO----------------------------------------------------
+El estudio de campos categóricos es limitado en comparación con el de campos numéricos.
+Al no existir orden ni distancia entre valores de los atributos, 
+perdemos la ayuda de la mayor parte de herramientas estadísticas. 
+Sin embargo, esto no significa que no podamos extraer información útil de estos campos. 
+Podemos comenzar nuetro análisis graficando un histograma de cada variable categórica.
+```{r}
+summary(credit)
+categorical_vars <- names(credit)[campos_categoricos]
 
+# Create a plotting function for categorical variables
+plot_categorical <- function(var_name) {
+  ggplot(credit, aes(x = .data[[var_name]])) +
+    geom_bar(fill = "skyblue", color = "black") +
+    labs(title = paste("Distribución de", var_name),
+         x = var_name, y = "Cantidad") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+categorical_plots <- map(categorical_vars, plot_categorical)
+
+grid.arrange(grobs = categorical_plots, ncol = 3)
+```
+
+Nos gustaría también ver cómo los valores que toman estos campos 
+afectan a la variable a predecir. Para ello podemos hacer uso de la función 
+`spineplot`, que nos muestra para cada valor de una variable tanto su 
+poblacion (ancho) como su tasa de aprobados (alto de la barra azul).
+```{r}
+par(mfrow = c(3, 3))  #plots en cuadrícula 3x3
+
+for (var in categorical_vars) {
+  spineplot(x = credit[[var]], 
+            y = credit$Aprobado,
+            ylevels = c("Rechazado", "Aprobado"),
+            xlab = var,
+            ylab = "Resultado",
+            main = paste("Aprobados por", var),
+            col = c("#46cac1", "#ff8080"),
+            border = c("#26958d", "#b13636"))
+}
+
+par(mfrow = c(1, 1))
+```
+
+Como punto de interés adicional, representemos también etnia frente a ciudadanía.
+```{r}
+spineplot(credit$Etnia, credit$Ciudadano,
+          xlab = "Etnia",
+          ylab = "Es ciudadano",
+          main = "Ciudadanía por Etnia",
+          col = c("#aeaeae", "#848484", "#575757"))
+```
+Con los datos representados podemos realizar varias deducciones sobre el contexto del dataset y 
+los significados de las etiquetas de algunos campos. Por ejemplo:
+
+En el plot de etnia frente a ciudadanía, vemos que no existen grandes variaciones en las 
+distribuciones de ciudadanía entre distintas etnias. Esto nos hace pensar que no estamos tratando 
+con datos provenientes de un único país. Si fuese así, la etnia mayoritaria tendría probablemente 
+un porcentaje de miembros ciudadanos muy superior al resto. Debemos suponer entonces, que aunque 
+los datos provengan de un banco japonés, sus clientes están distribuidos por vairos países, y 
+el campo "Es_ciudadano" hace referencia a la cuidadanía respecto al país en el que residen. 
+
+Trabaja: puesto que una persona con trabajo tiene mucha más facilidad para recibir aprobación por 
+parte de un banco, resulta bastante claro que "t" y "f" se corresponden con tener y no tener  
+trabajo, respectivamente.
+
+Impago previo: de manera bastante inmediata, el valor "f" de impago previo representa presencia 
+de impagos por su terrible impacto en la tasa de aprobado (al contrario de lo que el nombre del 
+campo pueda dar a entender). "t" significaría entonces ausencia de impagos. El valor de esta 
+variable es un factor muy importante a la hora de decidir si se aprueba o no la solicitud. Tanto 
+así que un predictor que utilice simplemente esta variable para clasificar, obtendría una tasa de 
+aciertos de (306+284)/690 ~= 0.855, bastante cercano a lo que obtendremos con técnicas más avanzadas.
+```{r}
+tab <- table(credit$Impago_previo, credit$Aprobado)
+df_plot <- as.data.frame(tab)
+names(df_plot) <- c("Impago_previo", "Aprobado", "Count")
+
+ggplot(plot_data, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label=Count), color = "black", size = 6) +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Tabla de frecuencias de impago previo frente a aprobado",
+       x = "Impago previo",
+       y = "Aprobado") +
+  theme_minimal(base_size = 20)
+```
 
 
 
@@ -585,8 +674,8 @@ Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones l
 
     # Correlaciones
     r_total <- cor(df$x, df$y)
-    r_plus  <- tryCatch(cor(df$x[df$clase == "+"], df$y[df$clase == "+"]), error = function(e) NA)
-    r_minus <- tryCatch(cor(df$x[df$clase == "-"], df$y[df$clase == "-"]), error = function(e) NA)
+    r_plus  <- tryCatch(cor(df$x[df$clase == "Aprobado"], df$y[df$clase == "Aprobado"]), error = function(e) NA)
+    r_minus <- tryCatch(cor(df$x[df$clase == "Rechazado"], df$y[df$clase == "Rechazado"]), error = function(e) NA)
 
     # R² global
     r2 <- tryCatch(summary(lm(y ~ x, data = df))$r.squared, error = function(e) NA)
@@ -630,7 +719,7 @@ como las separadas por clase.
 
 Las correlaciones son, en su mayoría, positivas y de pequeña magnitud.
 Tiene sentido, por ejemplo, que a mayor edad tenga una persona, más larga sea su vida laboral.
-Estas correlaciones son más intensas en la clase `+`. Esto suguiere que los
+Estas correlaciones son más intensas en la clase `+`. Esto sugiere que los
 casos aprobados siguen patrones más regulares. 
 En el caso de la relación `Edad`-`Anos_cotizados`, podríamos interpretar que a la hora de
 la concesión de un crédito a una persona joven, se es mas laxo con una vida laboral más corta.
@@ -700,8 +789,8 @@ Si repetimos la matriz de correlaciones para este dataset:
 
     # Correlaciones
     r_total <- cor(df$x, df$y)
-    r_plus  <- tryCatch(cor(df$x[df$clase == "+"], df$y[df$clase == "+"]), error = function(e) NA)
-    r_minus <- tryCatch(cor(df$x[df$clase == "-"], df$y[df$clase == "-"]), error = function(e) NA)
+    r_plus  <- tryCatch(cor(df$x[df$clase == "Aprobado"], df$y[df$clase == "Aprobado"]), error = function(e) NA)
+    r_minus <- tryCatch(cor(df$x[df$clase == "Rechazado"], df$y[df$clase == "Rechazado"]), error = function(e) NA)
 
     # R² global
     r2 <- tryCatch(summary(lm(y ~ x, data = df))$r.squared, error = function(e) NA)
@@ -758,7 +847,7 @@ ggplot(subset_credit, aes(x = Esfuerzo_financiero, fill = Aprobado)) +
 La separación es aún mejor que en el caso general. Podemos ver el rendimiento de este predictor para este subdataset:
 
 ```{r}
-  subset_credit$Prediccion_simple <- ifelse(subset_credit$Esfuerzo_financiero > 1.6, "+", "-")
+  subset_credit$Prediccion_simple <- ifelse(subset_credit$Esfuerzo_financiero > 1.6, "Aprobado", "Rechazado")
   table(Real = subset_credit$Aprobado, Predicho = subset_credit$Prediccion_simple)
   
   library(ggplot2)
@@ -771,10 +860,10 @@ La separación es aún mejor que en el caso general. Podemos ver el rendimiento 
   # Añadir etiquetas
   conf_df <- conf_df %>%
     mutate(Tipo = case_when(
-      Real == "+" & Predicho == "+" ~ "Verdadero Positivo",
-      Real == "-" & Predicho == "+" ~ "Falso Positivo",
-      Real == "-" & Predicho == "-" ~ "Verdadero Negativo",
-      Real == "+" & Predicho == "-" ~ "Falso Negativo"
+      Real == "Aprobado" & Predicho == "Aprobado" ~ "Verdadero Positivo",
+      Real == "Rechazado" & Predicho == "Aprobado" ~ "Falso Positivo",
+      Real == "Rechazado" & Predicho == "Rechazado" ~ "Verdadero Negativo",
+      Real == "Aprobado" & Predicho == "Rechazado" ~ "Falso Negativo"
     ))
 
   
