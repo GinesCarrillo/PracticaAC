@@ -41,8 +41,11 @@ automático.
 
 Comenzamos instalando las librerías de R necesarias para la elaboración de la práctica:
  - caret (Classification And REgresion Training): paquete para entrenar modelos de machine learning en R. Facilita, entre otros, el preprocesado de datos, la división de conjuntos de train/test, el ajuste de hiperparámetros...
+  
  - tidyverse: colección de paquetes para ciencia de datos. Permite manipulación de datos, lectura de archivos y creación de gráficos.
+ 
  - ggplot2: creación de gráficos.
+ 
  - gridExtra: permite combinar varios ggplot en una sola figura.
 
 También cargamos el [dataset](https://archive.ics.uci.edu/static/public/27/credit+approval.zip) y vemos su contenido.
@@ -55,6 +58,12 @@ if (!requireNamespace("caret", quietly = TRUE)) {
   install.packages("caret")
 }
 
+if (!requireNamespace("randomForest", quietly = TRUE)) {
+  install.packages("randomForest")
+}
+if (!requireNamespace("doParallel", quietly = TRUE)) {
+  install.packages("doParallel")
+}
 if (!requireNamespace("tidyverse", quietly = TRUE)) {
   install.packages("tidyverse")
 }
@@ -96,10 +105,12 @@ que este contiene. En esta fase, conocida como Análisis Exploratorio de Datos, 
 - **Etiquetado de los atributos**:
     en vista de la ausencia de etiquetas interpretables para los atributos del dataset, en esta primera etapa hemos buscado
     entender el significado de cada uno de ellos y renombrarlos de manera más intuitiva.
+
 - **Análisis monovariable**:
     a continuación, hemos analizado las distribuciones seguidas por cada uno de los atributos, estudiando también sus valores 
     máximos, mínimos, medias y cuartiles.
-- **Analísis multivariable**:
+
+- **Análisis multivariable**:
     finalmente, hemos realizado un estudio de cómo distintos atributos se relacionan entre sí.
 
 ## Etiquetado de los atributos
@@ -621,7 +632,7 @@ tab <- table(credit$Impago_previo, credit$Aprobado)
 df_plot <- as.data.frame(tab)
 names(df_plot) <- c("Impago_previo", "Aprobado", "Count")
 
-ggplot(plot_data, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
+ggplot(df_plot, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
   geom_tile(color = "white") +
   geom_text(aes(label=Count), color = "black", size = 6) +
   scale_fill_gradient(low = "white", high = "steelblue") +
@@ -769,9 +780,13 @@ tiene un índice crediticio superior a 3.
 El resultado es una tabla de 151 entradas.
 El perfil medio de estas solicitudes, más allá de la calificación crediticia, se deferencia
 del perfil general en cuatro ámbitos:
+
 - Todos tienen un puestro de trabajo.
+  
 - La deuda es mayor (6.739 vs 4.759 de media).
+  
 - Más años cotizados (1 en el primer cuartil vs 0.165).
+  
 - Más ingresos (540 vs 5 de media).
 
 Si repetimos la matriz de correlaciones para este dataset:
@@ -1053,13 +1068,159 @@ pico en 200) ¿Ha funcionado el ajuste de grano m´as fino
 
 
 ## Modelos seleccionados
+Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
+```{r}
+credit_esfuerzo <- credit.Datos.Train
+credit_esfuerzo$Esfuerzo_financiero <- credit.Datos.Train$Deuda + credit.Datos.Train$Anos_cotizados  + abs(credit.Datos.Train$Ingresos-1)*0.375
 
-Describe brevemente los 4 modelos y por qué se han escogido.
+credit_no_na<- na.omit(credit.Datos.Train)
+credit_no_na_esfuerzo <- na.omit(credit_esfuerzo)
+credit.Var.Salida.Usada <- c("Aprobado")
+credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
+credit.Vars.Entrada.Usadas2 <- setdiff(names(credit_esfuerzo), credit.Var.Salida.Usada)
+```
 
-## Entrenamiento de modelos
 
-```{r train-models}
-# train() para cada modelo
+Probamos el preprocesado imputando por la mediana (numericas) y la moda (categóricas)
+```{r}
+# Copia del dataset original
+df_rf <- credit.Datos.Train
+
+# Asegurarse de que la variable de salida es factor
+df_rf[[credit.Var.Salida.Usada]] <- as.factor(df_rf[[credit.Var.Salida.Usada]])
+
+# 1. Variables numéricas: imputar con la mediana
+vars_numericas <- names(df_rf)[sapply(df_rf, is.numeric)]
+for (var in vars_numericas) {
+  if (anyNA(df_rf[[var]])) {
+    med <- median(df_rf[[var]], na.rm = TRUE)
+    df_rf[[var]][is.na(df_rf[[var]])] <- med
+  }
+}
+
+# 2. Variables categóricas: imputar con la moda
+vars_categoricas <- names(df_rf)[sapply(df_rf, is.character) | sapply(df_rf, is.factor)]
+moda <- function(x) names(which.max(table(x)))
+for (var in vars_categoricas) {
+  if (anyNA(df_rf[[var]])) {
+    mod <- moda(df_rf[[var]][!is.na(df_rf[[var]])])
+    df_rf[[var]][is.na(df_rf[[var]])] <- mod
+  }
+  df_rf[[var]] <- as.factor(df_rf[[var]])
+}
+
+# Resultado: df_rf ya tiene todos los NA imputados
+sum(is.na(df_rf))  # debe ser 0
+```
+### Random Forest
+
+```{r}
+library(caret)
+library(randomForest)
+
+set.seed(68)
+
+# Número de folds y repeticiones
+n_folds <- 10
+n_reps <- 3
+seedsLength <- n_folds * n_reps
+seeds <- vector(mode = "list", length = seedsLength)
+
+# Índices de validación cruzada
+foldIndexes <- createMultiFolds(df_rf[[credit.Var.Salida.Usada]],
+                                 k = n_folds,
+                                 times = n_reps)
+
+combHParam <- 10  # número de combinaciones de mtry que se probarán
+
+# Semillas para reproducibilidad
+for (i in 1:seedsLength) seeds[[i]] <- sample.int(n = 1000 + combHParam, combHParam)
+seeds[[seedsLength + 1]] <- sample.int(1000, 1)
+
+
+# Configuración de control
+credit.rf.ctrl <- trainControl(
+  method = "repeatedcv",
+  number = n_folds,
+  repeats = n_reps,
+  verboseIter = FALSE,
+  index = foldIndexes,
+  seeds = seeds
+)
+
+# Entrenamiento del modelo
+set.seed(68)
+credit.rf.accuracy <- train(
+  df_rf[credit.Vars.Entrada.Usadas2],
+  df_rf[[credit.Var.Salida.Usada]], 
+  method = 'rf',
+  verbose = FALSE,
+  #metric = "ROC",
+  tuneLength = 15,
+  trControl = credit.rf.ctrl,
+  ntree = 50
+)
+
+
+# Mostrar resultados
+credit.rf.accuracy
+
+varImp(credit.rf.accuracy)
+```
+
+```{r}
+library(caret)
+library(randomForest)
+
+set.seed(68)
+
+# Número de folds y repeticiones
+n_folds <- 10
+n_reps <- 3
+seedsLength <- n_folds * n_reps
+seeds <- vector(mode = "list", length = seedsLength)
+
+# Índices de validación cruzada
+foldIndexes <- createMultiFolds(credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],
+                                 k = n_folds,
+                                 times = n_reps)
+
+combHParam <- 10  # número de combinaciones de mtry que se probarán
+
+# Semillas para reproducibilidad
+for (i in 1:seedsLength) seeds[[i]] <- sample.int(n = 1000 + combHParam, combHParam)
+seeds[[seedsLength + 1]] <- sample.int(1000, 1)
+
+
+# Configuración de control
+credit.rf.ctrl <- trainControl(
+  method = "repeatedcv",
+  number = n_folds,
+  repeats = n_reps,
+  verboseIter = FALSE,
+  index = foldIndexes,
+  seeds = seeds
+)
+
+
+# Entrenamiento del modelo
+set.seed(68)
+credit.rf.accuracy <- train(
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
+  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  method = 'rf',
+  verbose = FALSE,
+  #metric = "ROC",
+  tuneLength = 10,
+  trControl = credit.rf.ctrl,
+  ntree = 50
+)
+
+
+# Mostrar resultados
+credit.rf.accuracy
+
+varImp(credit.rf.accuracy)
 ```
 
 ## Búsqueda de hiperparámetros (grid search)
