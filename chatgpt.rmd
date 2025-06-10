@@ -1249,6 +1249,7 @@ que el decisor que ya habíamos considerado en la fase de análisis exploratorio
 la solicitud, si no, se aprueba.
 
 ### Random Forest (ranger)
+
 El siguiente modelo que vamos a utilizar es Random Forest.
 Los Bosques Aleatorios son una técnica de aprendizaje automático que opera 
 construyendo múltiples árboles de decisión durante el entrenamiento y 
@@ -1331,6 +1332,106 @@ También nos damos cuenta que, como ocurría en *rpart*, la variable de mayor im
 También le da bastante importancia a las variable añadidas por nosotros (Esfuerzo_financiero y DeudaRelativa), lo cual nos hace pensar
 que ha sido una buena inclusión.
 
+### Gradient Boosting Machine
+
+Gradient boosting (o potenciación del gradiente en castellano) funciona construyendo 
+un conjunto de modelos predictivos que ejecutan decisiones simples sobre los datos. 
+Estos decisores son normalmente árboles de decisión, aunque también puede emplear métodos de
+regresión lineal, splines o redes neuronales poco profundas, entre otros.
+
+La justificación en el uso de árboles radica en su flexibilidad tratando todo tipo de datos:
+numéricos y categóricos, capacidad para capturar interacciones entre variables, eficiencia
+computacional e interpretabilidad.
+
+Gbm produce nuevos modelos de forma secuencial, buscando minimizar en cada iteración una
+función de pérdida arbitraria que mide la diferencia entre las predicciones y los valores
+reales. El nuevo modelo se austa a los "pseudo-residuales", que son los gradientes
+negativos de la función de pérdida con respecto a las predicciones actuales. 
+Este proceder es lo que le da el nombre de "gradient", pues lo que se hace en esencia es 
+minimizar en la dirección que más decrece el gradiente de la función de pérdidas. 
+
+Escogemos gbm ya que:
+
+- Permite trabajar con combinaciones de datos numéricos y categóricos.
+  
+- Captación de relaciones entre componentes, tal cual lo hacen otras técnicas que usan árboles de decisión.
+
+- Perfecto para clasificación binaria con la función de pérdida de desviación binaria (por defecto). 
+
+En primer lugar, vamos a definir un grid de hiperparámetros para encontrar las condiciones ideales con las que utilizar gbm.
+Vamos a hacer una exploración para el número de árboles, para la profundidad máxima de los mismos,
+la tasa de aprendizaje y mínimo de observaciones por nodo.
+Finalmete, con mtry indicamos el número de variables utilizadas aleatoriamente como predictores.
+También fijamos una semilla para poder recrear los resultados.
+
+```{r}
+library(caret)
+set.seed(610)
+
+gbm_grid <- expand.grid(
+  n.trees = c(100, 200, 300),
+  interaction.depth = c(1, 3, 5, 7),
+  shrinkage = c(0.01, 0.02, 0.03),
+  n.minobsinnode = c(15, 20, 25)
+)
+
+n_folds <- 10
+n_reps <- 3
+```
+
+Posteriormente, definimos el control de entrenamiento para determinar cómo
+realizar la validación cruzada y qué metricas usar para evaluar la combinación de los hiperparámetros.
+Vamos a utilizar validación cruzada repetiva con 10 folds y 3 repeticiones. 
+
+```{r}
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = n_folds,
+  repeats = n_reps,
+  allowParallel = TRUE
+)
+```
+
+Finalmente, realizamos el entrenamiento del modelo, especificando la columna de salida "Aprobado".
+
+```{r}
+gbm_modelo <- train(
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
+  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  method = "gbm",
+  trControl = fitControl,
+  tuneGrid = gbm_grid,
+  verbose = FALSE
+)
+```
+
+El resultado óptimo de accuracy (0.8790174) se ha obtenido con los siguiente parámetros:
+
+- n.trees = 300
+  
+- interaction.depth = 1
+  
+- shrinkage = 0.02
+  
+- n.minobsinnode = 25
+  
+El resultado más sorprendente es que el modelo está tomando un interaction depth de 1, 
+resultando extremadamente simple. Es decir, está utilizando únicamente una variable como
+predictor. Podemos ver la evolución de la acurracy en función de la tasa de aprendizaje
+para todas las combinaciones de parámetros:
+
+```{r}
+plot(gbm_modelo, metric = "Accuracy", plotType = "scatter", ylim = c(0.85, 0.89))
+```
+
+En lo relativo a la importancia de las variables, podemos observarla ejecutando el siguiente comando:
+
+```{r}
+varImp(gbm_modelo)
+```
+
+Nuevamente, el impago previo es la variable más determinante, de ahí que se esté tomando una
+profundidad de 1. Los predictores se están haciendo con este campo.
 
 ## Búsqueda de hiperparámetros (grid search)
 
