@@ -1441,7 +1441,7 @@ plot(gbm_modelo, metric = "Accuracy", plotType = "scatter", ylim = c(0.85, 0.89)
 En lo relativo a la importancia de las variables, podemos observarla ejecutando el siguiente comando:
 
 ```{r}
-varImp(gbm_modelo)
+# varImp(gbm_modelo)
 ```
 
 Nuevamente, el impago previo es la variable más determinante, de ahí que se esté tomando una
