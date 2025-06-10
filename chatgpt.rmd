@@ -975,20 +975,7 @@ table(con_na)
 library(ggplot2)
 
 ggplot(data.frame(Faltantes = con_na), aes(x = Faltantes)) +
-  geom_bar(fill = "steelblue") +
-  labs(title = "Nº de atributos faltantes por observación",
-       x = "Cantidad de NA",
-       y = "Frecuencia") +
-  theme_minimal()
-
-```
-
-Vemos que a la mayoría de muestras con valores NA solo les falta un valor. Sin embargo, también es importante
-destacar que hay 6 muestras a las cuales les faltan 5 valores. 
-
-Como estrategia de limpieza, se han eliminado las observaciones del conjunto de entrenamiento 
-que contenían más de 4 valores nulos. Esta decisión se justifica por el hecho de que esas observaciones presentan información muy incompleta, 
-y su imputación generaría más ruido que beneficio. 
+  geom_bar(fill = "steelblue") +transformacion
 El resto de las observaciones, con pocos valores faltantes, se conservarán y se decidirá si se inputan o no posteriormente.
 ```{r faltantes2}
 # Eliminar observaciones con más de 4 atributos faltantes
@@ -1013,7 +1000,37 @@ Los valores nulos deben tratarse adecuadamente antes de entrenar modelos de apre
 En nuestro caso, es probable que la mejor opción sea simplemente eliminar las filas con datos faltantes, pues como hemos visto en
 la gráfica anterior, hay muy pocos valores nulos en comparación con el número total de muestras que disponemos.
 
+### Transformación de los datos 
+A la hora de transformar los datos hay varias opciones posibles, las cuales hemos 
+comparado para ver los resultados que obteníamos con cada una de ellas:
+- Sin transformaciones: Es la opción más sencilla, que consiste en utilizar las variables directamente como vienen de serie.
+  
+- Transformación logarítmica: Esta transformación es muy útil para variables con una distribución asimétrica positiva 
+  (sesgada a la derecha), como ingresos, deuda o puntuaciones de crédito, 
+  donde la mayoría de los valores son pequeños pero hay algunos muy grandes.
 
+- BoxCox: Intenta encontrar la mejor transformación 
+para que una variable siga una distribución normal. La principal limitación es que no acepta valores negativos.
+
+- Yeo-Johnson: Es una extensión de la transformación Box-Cox que sí permite trabajar 
+  con valores negativos y con valores iguales a 0.
+
+Tras probar las 4 alternativas, nos dimos cuenta que no existía una gran diferencia entre ellas, obteniendo la opción
+sin transformaciones unos resultados prácticamente idénticos al resto para todos los modelos. Es por ello que decidimos 
+proseguir sin introducir transformaciones generales en los datos.
+
+```{r}
+vars_to_transform <- names(credit)[campos_log]
+
+# Iterar sobre cada variable numérica y aplicar logaritmo (log(x + 1))
+for (var in vars_to_transform) {
+  credit.Datos.Train[[var]] <- log(credit.Datos.Train[[var]] + 1)
+  credit.Datos.Test[[var]] <- log(credit.Datos.Test[[var]] + 1)
+}
+
+# Limpiar variables temporales
+rm(var, vars_to_transform)
+```
 
 ### Creación y análisis del predictor `DeudaRelativa`
 Hemos pensado en crear la variable DeudaRelativa, que creemos que tiene más sentido que la variable Deuda,
@@ -1025,7 +1042,7 @@ credit.Datos.Train$DeudaRelativa <- log(1 + credit.Datos.Train$Deuda / (credit.D
 credit.Datos.Test$DeudaRelativa <- log(1 + credit.Datos.Test$Deuda / (credit.Datos.Test$Ingresos + 1))
 # Boxplot de DeudaRelativa según Aprobado
 ggplot(credit.Datos.Train, aes(x = Aprobado, y = DeudaRelativa, fill = Aprobado)) +
-  geom_boxplot() +
+  geom_boxplot() +siendo
   labs(title = "Relación Deuda / Ingresos según Aprobación",
        x = "Aprobado",
        y = "DeudaRelativa") +
@@ -1156,6 +1173,8 @@ credit_esfuerzo$Esfuerzo_financiero <- credit.Datos.Train$Deuda + credit.Datos.T
 
 credit_no_na<- na.omit(credit.Datos.Train)
 credit_no_na_esfuerzo <- na.omit(credit_esfuerzo)
+credit_no_na_esfuerzo[[credit.Var.Salida.Usada]] <- as.factor(credit_no_na_esfuerzo[[credit.Var.Salida.Usada]])
+
 credit.Var.Salida.Usada <- c("Aprobado")
 credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), c(credit.Var.Salida.Usada))
 credit.Vars.Entrada.Usadas2 <- setdiff(names(credit_esfuerzo), credit.Var.Salida.Usada)
@@ -1214,7 +1233,7 @@ tree_model <- train(
 
 tree_model
 
-rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión (rpart)")
+# rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión (rpart)")
 varImp(tree_model)
 tree_model$finalModel$variable.importance
 ```
@@ -1242,156 +1261,76 @@ las implementaciones más rápidas de Bosques Aleatorios disponibles en R,
 o que nos permitirá entrenar modelos de Bosques Aleatorios en grandes conjuntos de datos de manera eficiente.
 
 Los dos hiperparámetros más influyentes para optimizar el rendimiento del modelo son mtry y splitrule:
+
 - **mtry**: Controla el número de variables predictoras que se consideran aleatoriamente 
 en cada división de un nodo al construir un árbol individual.
-- 
+
+- **splitrule** Define el criterio utilizado para decidir cómo se realiza la mejor división en cada nodo de un árbol. 
+  Las opciones disponibles para esta parámetro son:
+
+    - gini (por defecto): Utiliza el índice de Gini para medir la impureza. 
+  
+    - extratrees: Implementa el algoritmo de "Extremely Randomized Trees". 
+En lugar de buscar la mejor división para cada variable (como lo hace Gini), 
+elige puntos de división aleatorios para cada variable y luego selecciona la mejor 
+de estas divisiones aleatorias. 
+
+Además, utilizando un tuneLength de 15 ya podemos comprobar todas las combinaciones posibles de hiperparámetros
+en nuestro caso. 
+Para el parámetro *num.trees* hemos probado con valores desde 50 hasta 1000 y no hemos obtenido diferencias notables 
+en los valores en este rango, por lo que decidimos utilizar 50 ya que el tiempo de computación es mucho menor.
+
+Realizamos el entrenamiento:
 
 ```{r}
+n_reps=3
+n_folds=10
 set.seed(68)
-fitControl <- trainControl(## 10-fold CV
-                           method = "cv",
-                           number = 10)
+
+
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = n_folds,
+  repeats = n_reps,
+  verboseIter = FALSE,
+  # index = foldIndexes,
+  # seeds = seeds,
+  #summaryFunction = twoClassSummary,
+  #classProbs = TRUE
+)
+
+
+# cl <- makeCluster(detectCores()-1)
+# registerDoParallel(cl)
+
+# set.seed(1234)
 
 credit.ranger <- train(
-  credit_no_na[credit.Vars.Entrada.Usadas],  
-  credit_no_na[[credit.Var.Salida.Usada]],   
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],  
+  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],   
   method = "ranger",                  
   verbose = FALSE,
   tuneLength = 15,                    
   trControl = fitControl,         
-  num.trees = 500,                     
+  num.trees = 50,                     
   importance = 'impurity'            
 )
+
+# stopImplicitCluster()
+# stopCluster(cl)
+# registerDoSEQ()
 
 credit.ranger
 
 varImp(credit.ranger)
 ```
-```{r}
-names_expected <- credit.ranger$finalModel$forest$independent.variable.names
-print(names_expected)
-# Check the names of the variables present in your test data
-names_in_test_data <- names(credit.Datos.Test)
-print(names_in_test_data)
-# Predecir sobre el conjunto de test usando el modelo entrenado
-pred_ranger <- predict(credit.ranger, newdata = credit.Datos.Test[credit.Vars.Entrada.Usadas])
 
-# Matriz de confusión y métricas de rendimiento
-confusionMatrix(pred_ranger, credit.Datos.Test$Aprobado)
+Obtenemos una *accuracy* de 88.38, utilizando mtry=14 y splitrule = extratrees.
 
+También nos damos cuenta que, como ocurría en *rpart*, la variable de mayor importancia es Impago previo.
+También le da bastante importancia a las variable añadidas por nosotros (Esfuerzo_financiero y DeudaRelativa), lo cual nos hace pensar
+que ha sido una buena inclusión.
 
-```
-
-### Random Forest (rf)
-
-```{r}
-library(caret)
-library(randomForest)
-
-set.seed(68)
-
-# Número de folds y repeticiones
-n_folds <- 10
-n_reps <- 3
-seedsLength <- n_folds * n_reps
-seeds <- vector(mode = "list", length = seedsLength)
-
-# Índices de validación cruzada
-foldIndexes <- createMultiFolds(df_rf[[credit.Var.Salida.Usada]],
-                                 k = n_folds,
-                                 times = n_reps)
-
-combHParam <- 10  # número de combinaciones de mtry que se probarán
-
-# Semillas para reproducibilidad
-for (i in 1:seedsLength) seeds[[i]] <- sample.int(n = 1000 + combHParam, combHParam)
-seeds[[seedsLength + 1]] <- sample.int(1000, 1)
-
-
-# Configuración de control
-credit.rf.ctrl <- trainControl(
-  method = "repeatedcv",
-  number = n_folds,
-  repeats = n_reps,
-  verboseIter = FALSE,
-  index = foldIndexes,
-  seeds = seeds
-)
-
-# Entrenamiento del modelo
-set.seed(68)
-credit.rf.accuracy <- train(
-  df_rf[credit.Vars.Entrada.Usadas2],
-  df_rf[[credit.Var.Salida.Usada]], 
-  method = 'rf',
-  verbose = FALSE,
-  #metric = "ROC",
-  tuneLength = 15,
-  trControl = credit.rf.ctrl,
-  ntree = 50
-)
-
-
-# Mostrar resultados
-credit.rf.accuracy
-
-varImp(credit.rf.accuracy)
-```
-
-```{r}
-library(caret)
-library(randomForest)
-
-set.seed(68)
-
-# Número de folds y repeticiones
-n_folds <- 10
-n_reps <- 3
-seedsLength <- n_folds * n_reps
-seeds <- vector(mode = "list", length = seedsLength)
-
-# Índices de validación cruzada
-foldIndexes <- createMultiFolds(credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],
-                                 k = n_folds,
-                                 times = n_reps)
-
-combHParam <- 10  # número de combinaciones de mtry que se probarán
-
-# Semillas para reproducibilidad
-for (i in 1:seedsLength) seeds[[i]] <- sample.int(n = 1000 + combHParam, combHParam)
-seeds[[seedsLength + 1]] <- sample.int(1000, 1)
-
-
-# Configuración de control
-credit.rf.ctrl <- trainControl(
-  method = "repeatedcv",
-  number = n_folds,
-  repeats = n_reps,
-  verboseIter = FALSE,
-  index = foldIndexes,
-  seeds = seeds
-)
-
-
-# Entrenamiento del modelo
-set.seed(68)
-credit.rf.accuracy <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
-  method = 'rf',
-  verbose = FALSE,
-  #metric = "ROC",
-  tuneLength = 10,
-  trControl = credit.rf.ctrl,
-  ntree = 50
-)
-
-
-# Mostrar resultados
-credit.rf.accuracy
-
-varImp(credit.rf.accuracy)
-```
 
 ## Búsqueda de hiperparámetros (grid search)
 

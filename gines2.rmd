@@ -1,0 +1,110 @@
+### Random Forest (rf)
+
+```{r}
+library(caret)
+library(randomForest)
+
+set.seed(68)
+
+# Número de folds y repeticiones
+n_folds <- 10
+n_reps <- 3
+seedsLength <- n_folds * n_reps
+seeds <- vector(mode = "list", length = seedsLength)
+
+# Índices de validación cruzada
+foldIndexes <- createMultiFolds(df_rf[[credit.Var.Salida.Usada]],
+                                 k = n_folds,
+                                 times = n_reps)
+
+combHParam <- 10  # número de combinaciones de mtry que se probarán
+
+# Semillas para reproducibilidad
+for (i in 1:seedsLength) seeds[[i]] <- sample.int(n = 1000 + combHParam, combHParam)
+seeds[[seedsLength + 1]] <- sample.int(1000, 1)
+
+
+# Configuración de control
+credit.rf.ctrl <- trainControl(
+  method = "repeatedcv",
+  number = n_folds,
+  repeats = n_reps,
+  verboseIter = FALSE,
+  index = foldIndexes,
+  seeds = seeds
+)
+
+# Entrenamiento del modelo
+set.seed(68)
+credit.rf.accuracy <- train(
+  df_rf[credit.Vars.Entrada.Usadas2],
+  df_rf[[credit.Var.Salida.Usada]], 
+  method = 'rf',
+  verbose = FALSE,
+  #metric = "ROC",
+  tuneLength = 15,
+  trControl = credit.rf.ctrl,
+  ntree = 50
+)
+
+
+# Mostrar resultados
+credit.rf.accuracy
+
+varImp(credit.rf.accuracy)
+```
+
+```{r}
+library(caret)
+library(randomForest)
+
+set.seed(68)
+
+# Número de folds y repeticiones
+n_folds <- 10
+n_reps <- 3
+seedsLength <- n_folds * n_reps
+seeds <- vector(mode = "list", length = seedsLength)
+
+# Índices de validación cruzada
+foldIndexes <- createMultiFolds(credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],
+                                 k = n_folds,
+                                 times = n_reps)
+
+combHParam <- 10  # número de combinaciones de mtry que se probarán
+
+# Semillas para reproducibilidad
+for (i in 1:seedsLength) seeds[[i]] <- sample.int(n = 1000 + combHParam, combHParam)
+seeds[[seedsLength + 1]] <- sample.int(1000, 1)
+
+
+# Configuración de control
+credit.rf.ctrl <- trainControl(
+  method = "repeatedcv",
+  number = n_folds,
+  repeats = n_reps,
+  verboseIter = FALSE,
+  index = foldIndexes,
+  seeds = seeds
+)
+
+
+# Entrenamiento del modelo
+set.seed(68)
+credit.rf.accuracy <- train(
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
+  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  method = 'rf',
+  verbose = FALSE,
+  #metric = "ROC",
+  tuneLength = 10,
+  trControl = credit.rf.ctrl,
+  ntree = 50
+)
+
+
+# Mostrar resultados
+credit.rf.accuracy
+
+varImp(credit.rf.accuracy)
+```
