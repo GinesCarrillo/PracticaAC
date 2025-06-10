@@ -953,6 +953,7 @@ ggplot(nulos_df, aes(x = reorder(Variable, -Nulos), y = Nulos)) +
 
 
 ```
+
 Vemos que solo 7 de los atributos tienen valores nulos y además la cantidad de estos es muy pequeña (cercano al 1% en
 todos los casos).
 
@@ -975,8 +976,23 @@ table(con_na)
 library(ggplot2)
 
 ggplot(data.frame(Faltantes = con_na), aes(x = Faltantes)) +
-  geom_bar(fill = "steelblue") +transformacion
-El resto de las observaciones, con pocos valores faltantes, se conservarán y se decidirá si se inputan o no posteriormente.
+  geom_bar(fill = "steelblue") +
+  labs(title = "Nº de atributos faltantes por observación",
+       x = "Cantidad de NA",
+       y = "Frecuencia") +
+  theme_minimal()
+```
+
+Vemos que a la mayoría de muestras con valores NA solo les falta un valor. Sin embargo, también es importante destacar que hay 6 muestras a las cuales les faltan 5 valores.
+
+Como estrategia de limpieza, se han eliminado las observaciones 
+del conjunto de entrenamiento que contenían más de 4 valores nulos. 
+Esta decisión se justifica por el hecho de que esas observaciones 
+presentan información muy incompleta, y su imputación generaría 
+más ruido que beneficio. El resto de las observaciones, con pocos 
+valores faltantes, 
+se conservarán y se decidirá si se inputan o no posteriormente.
+
 ```{r faltantes2}
 # Eliminar observaciones con más de 4 atributos faltantes
 credit.Datos.Train <- credit.Datos.Train[na_por_fila <= 4, ]
@@ -1042,7 +1058,7 @@ credit.Datos.Train$DeudaRelativa <- log(1 + credit.Datos.Train$Deuda / (credit.D
 credit.Datos.Test$DeudaRelativa <- log(1 + credit.Datos.Test$Deuda / (credit.Datos.Test$Ingresos + 1))
 # Boxplot de DeudaRelativa según Aprobado
 ggplot(credit.Datos.Train, aes(x = Aprobado, y = DeudaRelativa, fill = Aprobado)) +
-  geom_boxplot() +siendo
+  geom_boxplot() +
   labs(title = "Relación Deuda / Ingresos según Aprobación",
        x = "Aprobado",
        y = "DeudaRelativa") +
@@ -1169,14 +1185,12 @@ pico en 200) ¿Ha funcionado el ajuste de grano m´as fino
 Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
 ```{r}
 credit_esfuerzo <- credit.Datos.Train
-credit_esfuerzo$Esfuerzo_financiero <- credit.Datos.Train$Deuda + credit.Datos.Train$Anos_cotizados  + abs(credit.Datos.Train$Ingresos-1)*0.375
+credit_esfuerzo$Esfuerzo_financiero <- log10(credit.Datos.Train$Deuda + 1) + log10(credit.Datos.Train$Anos_cotizados + 1)  + abs(log10(credit.Datos.Train$Ingresos + 1)-1)*0.375
 
 credit_no_na<- na.omit(credit.Datos.Train)
 credit_no_na_esfuerzo <- na.omit(credit_esfuerzo)
-credit_no_na_esfuerzo[[credit.Var.Salida.Usada]] <- as.factor(credit_no_na_esfuerzo[[credit.Var.Salida.Usada]])
-
 credit.Var.Salida.Usada <- c("Aprobado")
-credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), c(credit.Var.Salida.Usada))
+credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
 credit.Vars.Entrada.Usadas2 <- setdiff(names(credit_esfuerzo), credit.Var.Salida.Usada)
 ```
 
