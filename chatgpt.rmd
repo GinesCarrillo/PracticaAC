@@ -1022,7 +1022,7 @@ pues no es tan importante la deuda que tengas, sino cómo de grande es esta deud
 ```{r crear-deuda-relativa}
 # Crear la nueva variable
 credit.Datos.Train$DeudaRelativa <- log(1 + credit.Datos.Train$Deuda / (credit.Datos.Train$Ingresos + 1))
-
+credit.Datos.Test$DeudaRelativa <- log(1 + credit.Datos.Test$Deuda / (credit.Datos.Test$Ingresos + 1))
 # Boxplot de DeudaRelativa según Aprobado
 ggplot(credit.Datos.Train, aes(x = Aprobado, y = DeudaRelativa, fill = Aprobado)) +
   geom_boxplot() +
@@ -1157,7 +1157,7 @@ credit_esfuerzo$Esfuerzo_financiero <- credit.Datos.Train$Deuda + credit.Datos.T
 credit_no_na<- na.omit(credit.Datos.Train)
 credit_no_na_esfuerzo <- na.omit(credit_esfuerzo)
 credit.Var.Salida.Usada <- c("Aprobado")
-credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
+credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), c(credit.Var.Salida.Usada))
 credit.Vars.Entrada.Usadas2 <- setdiff(names(credit_esfuerzo), credit.Var.Salida.Usada)
 ```
 
@@ -1217,11 +1217,22 @@ tree_model$finalModel$variable.importance
 ```
 
 ### Random Forest (ranger)
-En esta sección, profundizaremos en la aplicación del algoritmo Random Forest, 
-implementado a través del paquete ranger en R, para abordar el problema de la 
-aprobación de créditos utilizando el conjunto de datos "Credit Approval" de la UCI. 
-La elección de Random Forest para esta tarea no es arbitraria; se basa en sus robustas características 
-y su probada eficacia en problemas de clasificación complejos, como el que nos ocupa.
+El siguiente modelo que vamos a utilizar es Random Forest.
+Los Bosques Aleatorios son una técnica de aprendizaje automático que opera 
+construyendo múltiples árboles de decisión durante el entrenamiento y 
+generando la clase que es elegida con mayor frecuencia en todos 
+los árboles individuales para la clasificación. 
+
+En concreto usamos *ranger* que está dentro de la librería
+*caret*. La razón principal para elegir ranger es su eficiencia. ranger es conocida por ser una de 
+las implementaciones más rápidas de Bosques Aleatorios disponibles en R, 
+o que nos permitirá entrenar modelos de Bosques Aleatorios en grandes conjuntos de datos de manera eficiente.
+
+Los dos hiperparámetros más influyentes para optimizar el rendimiento del modelo son mtry y splitrule:
+- **mtry**: Controla el número de variables predictoras que se consideran aleatoriamente 
+en cada división de un nodo al construir un árbol individual.
+- 
+
 ```{r}
 set.seed(68)
 fitControl <- trainControl(## 10-fold CV
@@ -1244,8 +1255,13 @@ credit.ranger
 varImp(credit.ranger)
 ```
 ```{r}
+names_expected <- credit.ranger$finalModel$forest$independent.variable.names
+print(names_expected)
+# Check the names of the variables present in your test data
+names_in_test_data <- names(credit.Datos.Test)
+print(names_in_test_data)
 # Predecir sobre el conjunto de test usando el modelo entrenado
-pred_ranger <- predict(credit.ranger, newdata = credit.Datos.Test)
+pred_ranger <- predict(credit.ranger, newdata = credit.Datos.Test[credit.Vars.Entrada.Usadas])
 
 # Matriz de confusión y métricas de rendimiento
 confusionMatrix(pred_ranger, credit.Datos.Test$Aprobado)
