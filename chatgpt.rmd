@@ -1447,10 +1447,74 @@ En lo relativo a la importancia de las variables, podemos observarla ejecutando 
 Nuevamente, el impago previo es la variable más determinante, de ahí que se esté tomando una
 profundidad de 1. Los predictores se están haciendo con este campo.
 
-## Búsqueda de hiperparámetros (grid search)
+### Multi Layer Perceptron
 
-```{r tuning}
-# train() con tuneGrid y trainControl
+Finalmente, queremos entrenar también un MLP para predecir la variable `Aprobado`. 
+Para esto hacemos uso de la librería `nnet`.
+
+Dada la gran importancia del campo `Impago_previo`, decidimos añadir un nuevo atributo 
+al dataset, llamado `Impago_previo_num`. Este campo es sencillamente una transformación 
+de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nuestro MLP.
+
+
+
+
+```{r}
+credit_copy <- credit
+credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
+campos_numericos_nuevo <- c(campos_numericos, 17)
+
+# Separación de conjuntos
+credit_copy_train <- credit_copy[credit.trainIdx, ]
+credit_copy_test <- credit_copy[-credit.trainIdx, ]
+```
+A continuación, elegimos los campos que usaremos como entrada para el modelo. 
+Experimentando con los datos de entrada, nos sorprendió ver que se producía una ligera 
+disminución en `Accuracy` cuando se elimina de los datos de entrada del modelo el campo 
+`Codigo_postal`. Esperábamos que este no aportara ningún valor como campo numérico. Sin 
+embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
+
+```{r}
+mlp_inputs <- campos_numericos_nuevo
+campos_numericos_nuevo
+mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17)
+```
+
+```{r}
+if (!requireNamespace("nnet", quietly = TRUE)) install.packages("nnet")
+library(nnet)
+
+credit_no_na <- credit_copy_train
+#tomamos logaritmo de variables en campos_log
+credit_log <- credit_no_na
+credit_log[campos_log] <- log(credit_log[campos_log] + 1)
+#credit_log[11] <- log(credit_log[11] + 1)
+
+
+campos_numericos
+credit_scaled <- credit_log
+credit_scaled[campos_numericos_nuevo] <- scale(credit_scaled[campos_numericos_nuevo])
+
+sum(is.na(credit_scaled))
+
+set.seed(123)
+ctrl <- trainControl(method = "cv", number = 10)
+
+mlp_cv <- train(
+  credit_scaled[mlp_inputs],
+  credit_scaled[["Aprobado"]],
+  method = "nnet",
+  trControl = ctrl,
+  tuneGrid = expand.grid(
+    size = c(3, 5, 7, 9, 11),
+    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+  ),
+  maxit = 200,
+  trace = FALSE
+)
+
+print(mlp_cv)
+plot(mlp_cv)
 ```
 
 # Comparación de modelos
