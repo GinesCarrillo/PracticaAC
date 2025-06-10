@@ -1202,8 +1202,8 @@ library(rpart)
 set.seed(155)
 
 tree_model <- train(
-  Aprobado ~ .,
-  data = credit_no_na[[credit.Vars.Entrada.Usadas]],
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]],
   method = "rpart",
   metric = "Accuracy",
   tuneLength = 10
@@ -1216,7 +1216,44 @@ varImp(tree_model)
 tree_model$finalModel$variable.importance
 ```
 
-### Random Forest
+### Random Forest (ranger)
+En esta sección, profundizaremos en la aplicación del algoritmo Random Forest, 
+implementado a través del paquete ranger en R, para abordar el problema de la 
+aprobación de créditos utilizando el conjunto de datos "Credit Approval" de la UCI. 
+La elección de Random Forest para esta tarea no es arbitraria; se basa en sus robustas características 
+y su probada eficacia en problemas de clasificación complejos, como el que nos ocupa.
+```{r}
+set.seed(68)
+fitControl <- trainControl(## 10-fold CV
+                           method = "cv",
+                           number = 10)
+
+credit.ranger <- train(
+  credit_no_na[credit.Vars.Entrada.Usadas],  
+  credit_no_na[[credit.Var.Salida.Usada]],   
+  method = "ranger",                  
+  verbose = FALSE,
+  tuneLength = 15,                    
+  trControl = fitControl,         
+  num.trees = 500,                     
+  importance = 'impurity'            
+)
+
+credit.ranger
+
+varImp(credit.ranger)
+```
+```{r}
+# Predecir sobre el conjunto de test usando el modelo entrenado
+pred_ranger <- predict(credit.ranger, newdata = credit.Datos.Test)
+
+# Matriz de confusión y métricas de rendimiento
+confusionMatrix(pred_ranger, credit.Datos.Test$Aprobado)
+
+
+```
+
+### Random Forest (rf)
 
 ```{r}
 library(caret)
