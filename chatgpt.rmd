@@ -1112,6 +1112,29 @@ for (var in vars_categoricas) {
 # Resultado: df_rf ya tiene todos los NA imputados
 sum(is.na(df_rf))  # debe ser 0
 ```
+
+### rpart
+
+```{r}
+library(rpart)
+
+set.seed(155)
+
+tree_model <- train(
+  Aprobado ~ .,
+  data = credit_no_na[[credit.Vars.Entrada.Usadas]],
+  method = "rpart",
+  metric = "Accuracy",
+  tuneLength = 10
+)
+
+tree_model
+
+rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión (rpart)")
+varImp(tree_model)
+tree_model$finalModel$variable.importance
+```
+
 ### Random Forest
 
 ```{r}
