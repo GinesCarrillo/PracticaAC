@@ -1050,6 +1050,87 @@ aprueben más fácilmente a quienes tienen un endeudamiento controlado respecto 
 Durante el entrenamiento de los modelos comprobaremos si la inclusión de esta variable reporta alguna 
 mejoría respecto a usar únicamente la deuda bruta.
 
+## Análisis de Componentes Principales (PCA)
+
+PCA es una técnica de análisis de datos utilizada para representar un conjunto de datos multidimensionales
+mediante un conjunto más reducido de variables generadas como combinaciones lineales de sus componentes. 
+Esto se consigue buscando la proyección según la cual los datos presentan una mayor varianza. 
+En nuestro caso solo 6 de los campos son numéricos. 
+Los campos que antes representábamos en escala logarítmica se pasan también en esta escala.
+No utilizamos el código postal ya que no es un dato continuo.
+
+```{r}
+    subset_train <- na.omit(credit.Datos.Train)
+    subset_train$Deuda <- log10(subset_train$Deuda + 1)
+    subset_train$Anos_cotizados <- log10(subset_train$Anos_cotizados + 1)
+    subset_train$Calificacion_crediticia <- log10(subset_train$Calificacion_crediticia + 1)
+    subset_train$Ingresos <- log10(subset_train$Ingresos + 1)
+    pca <- subset_train[c("Edad", "Deuda", "Anos_cotizados", "Calificacion_crediticia", "Ingresos")]
+    pca
+```
+
+Mediante un gráfico de dispersión vemos las distribuciones
+de las dos primerascomponentes calculadas diferenciando según `Aprobado`.
+
+```{r}
+pca_res <- prcomp(pca, scale = TRUE)
+pca_df = as.data.frame(pca_res$x,stringsAsFactors=F)
+pca_df = cbind(Aprobado = subset_train$Aprobado,pca_df)
+
+ggplot(pca_df, aes(PC1, PC2)) + 
+     modelr::geom_ref_line(h = 0) +
+     modelr::geom_ref_line(v = 0) +
+     geom_point(aes(color = Aprobado), size = 2, position='jitter',alpha = 0.4) +
+     xlab("First Principal Component") + 
+     ylab("Second Principal Component") + 
+     ggtitle("First Two Principal Components of Credit Data")
+```
+
+Como vemos, la componente PC1 parece un buen predictor. Podemos visualizar su dispersión en el siguiente gráfico y
+utilizar su matriz de confusión para ver su rendimiento como predictor.
+
+```{r}
+    ggplot(pca_df, aes(x = PC1, fill = Aprobado)) +
+    geom_density(alpha = 0.5) +
+    labs(title = "Distribución de PC1 según Aprobado",
+        x = "PC1",
+        y = "Densidad") +
+    theme_minimal()
+
+    pca_df$Prediccion_simple <- ifelse(pca_df$PC1 > 0.2, "Aprobado", "Rechazado")
+    
+    # Crear tabla de confusión en formato largo
+    conf_mat <- table(Real = pca_df$Aprobado, Predicho = pca_df$Prediccion_simple)
+    conf_df <- as.data.frame(conf_mat)
+
+    # Añadir etiquetas
+    conf_df <- conf_df %>%
+        mutate(Tipo = case_when(
+        Real == "Aprobado" & Predicho == "Aprobado" ~ "Verdadero Positivo",
+        Real == "Rechazado" & Predicho == "Aprobado" ~ "Falso Positivo",
+        Real == "Rechazado" & Predicho == "Rechazado" ~ "Verdadero Negativo",
+        Real == "Aprobado" & Predicho == "Rechazado" ~ "Falso Negativo"
+        ))
+
+    ggplot(conf_df, aes(x = Predicho, y = Real, fill = Freq)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(Freq, "\n", Tipo)), size = 4) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    labs(title = "Matriz de confusión para predictor basado en esfuerzo financiero",
+        x = "Predicción", y = "Clase real", fill = "Frecuencia") +
+    theme_minimal()
+```
+
+De la componente PC1 podemos saber también cómo se calcula a partir de los campos numéricos originales:
+
+```{r}
+    loadings <- pca_res$rotation
+    loadings[,1]
+```
+
+Las seis componentes aparecen ordenadas según la proporción de la varianza explicada (PVE).
+La PVE de un componente coincide con la proporción del autovalor m-ésimo
+
 # Modelado y entrenamiento
 
 – ¿Por qu´e has escogido estudiar ´este o aquel modelo frente a otros potencialmente alternativos?
