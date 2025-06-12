@@ -1072,9 +1072,6 @@ for (var in vars_to_transform) {
 rm(dx, dx_transformed, dx_transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
 
-
-
-
 ## Análisis de Componentes Principales (PCA)
 
 PCA es una técnica de análisis de datos utilizada para representar un conjunto de datos multidimensionales
@@ -1152,8 +1149,23 @@ De la componente PC1 podemos saber también cómo se calcula a partir de los cam
     loadings[,1]
 ```
 
-Las seis componentes aparecen ordenadas según la proporción de la varianza explicada (PVE).
-La PVE de un componente coincide con la proporción del autovalor m-ésimo... (TODO)
+PC1 da más o menos la misma importancia a todas las variables, relacionándose de forma positiva con todas.
+La que tiene un mayor coeficiente es la `Calificacion_crediticia`. Cabe mencionar que estos coeficientes
+se calculan sobre una distribución reescalada para seguir una distribución normal, por lo que es correcto
+el análisis de correlacionar una mayor importancia en la clasificación con respecto al escalar dado por
+la tabla anterior. 
+
+Las cinco componentes PCX aparecen ordenadas según la proporción de la varianza explicada (PVE).
+Podemos verlo para estos datos.
+
+```{r}
+  VE <- pca_res$sdev^2
+  PVE <- VE / sum(VE)
+  round(PVE,2)
+```
+
+La primera componente explica, pues, más de un tercio de la varianza. Junto con la segunda, consiguen
+explicar prácticamente el 60%.
 
 # Modelado y entrenamiento
 
