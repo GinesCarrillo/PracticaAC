@@ -1000,6 +1000,19 @@ Los valores nulos deben tratarse adecuadamente antes de entrenar modelos de apre
 En nuestro caso, es probable que la mejor opción sea simplemente eliminar las filas con datos faltantes, pues como hemos visto en
 la gráfica anterior, hay muy pocos valores nulos en comparación con el número total de muestras que disponemos.
 
+### Creación del atributo `EsfuerzoFinanciero`
+Como ya hemos comentado, creemos que el atributo *EsfuerzoFinanciero* puede ser útil pues da buenos
+resultados como predictor. Es por eso que finalmente decidimos añadirlo como variable para entrenar los
+modelos:
+
+```{r crear-esfuerzo_financiero}
+credit.Datos.Train$Esfuerzo_financiero <- log10(credit.Datos.Train$Deuda + 1) + log10(credit.Datos.Train$Anos_cotizados + 1)  + abs(log10(credit.Datos.Train$Ingresos + 1)-1)*0.375
+credit.Datos.Test$Esfuerzo_financiero <- log10(credit.Datos.Test$Deuda + 1) + log10(credit.Datos.Test$Anos_cotizados + 1)  + abs(log10(credit.Datos.Test$Ingresos + 1)-1)*0.375
+if (!"Esfuerzo_financiero" %in% names(credit.Datos.Train)[campos_numericos]) {
+  campos_numericos <- c(campos_numericos, which(names(credit.Datos.Train) == "Esfuerzo_financiero"))
+}
+```
+
 ### Transformación de los datos 
 A la hora de transformar los datos hay varias opciones posibles, las cuales hemos 
 comparado para ver los resultados que obteníamos con cada una de ellas:
@@ -1021,51 +1034,46 @@ sin transformaciones unos resultados prácticamente idénticos al resto para tod
 proseguir sin introducir transformaciones generales en los datos.
 
 ```{r}
-vars_to_transform <- names(credit)[campos_log]
+# vars_to_transform <- names(credit)[campos_log]
 
-# Iterar sobre cada variable numérica y aplicar logaritmo (log(x + 1))
+# # Iterar sobre cada variable numérica y aplicar logaritmo (log(x + 1))
+# for (var in vars_to_transform) {
+#   credit.Datos.Train[[var]] <- log(credit.Datos.Train[[var]] + 1)
+#   credit.Datos.Test[[var]] <- log(credit.Datos.Test[[var]] + 1)
+# }
+
+# # Limpiar variables temporales
+# rm(var, vars_to_transform)
+```
+
+```{r}
+# Definir las variables para aplicar la transformación
+vars_to_transform <- names(credit)[campos_numericos]
+
+# Iterar sobre cada variable
 for (var in vars_to_transform) {
-  credit.Datos.Train[[var]] <- log(credit.Datos.Train[[var]] + 1)
-  credit.Datos.Test[[var]] <- log(credit.Datos.Test[[var]] + 1)
+  # Seleccionar la columna actual
+  dx <- credit.Datos.Train[, var, drop = FALSE]
+  dxTest <- credit.Datos.Test[, var, drop = FALSE]
+
+  # Aplicar la transformación Yeo-Johnson
+  preProcValues <- preProcess(dx, method = "YeoJohnson")
+
+  # Transformar los datos
+  dx_transformed <- predict(preProcValues, dx)
+  dx_transformedTest <- predict(preProcValues, dxTest)
+
+  # Sustituir la columna original por la transformada
+  credit.Datos.Train[, var] <- dx_transformed[[var]]
+  credit.Datos.Test[, var] <- dx_transformedTest[[var]]
 }
 
 # Limpiar variables temporales
-rm(var, vars_to_transform)
-```
-
-### Creación y análisis del predictor `DeudaRelativa`
-Hemos pensado en crear la variable DeudaRelativa, que creemos que tiene más sentido que la variable Deuda,
-pues no es tan importante la deuda que tengas, sino cómo de grande es esta deuda comparada con tus ingresos.
-
-```{r crear-deuda-relativa}
-# Crear la nueva variable
-credit.Datos.Train$DeudaRelativa <- log(1 + credit.Datos.Train$Deuda / (credit.Datos.Train$Ingresos + 1))
-# Boxplot de DeudaRelativa según Aprobado
-ggplot(credit.Datos.Train, aes(x = Aprobado, y = DeudaRelativa, fill = Aprobado)) +
-  geom_boxplot() +
-  labs(title = "Relación Deuda / Ingresos según Aprobación",
-       x = "Aprobado",
-       y = "DeudaRelativa") +
-  theme_minimal()
-
-
-# Gráfico de densidad por clase
-ggplot(credit.Datos.Train, aes(x = DeudaRelativa, fill = Aprobado)) +
-  geom_density(alpha = 0.5) +
-  labs(title = "Distribución de DeudaRelativa por clase",
-       x = "DeudaRelativa",
-       y = "Densidad") +
-  theme_minimal()
-
+rm(dx, dx_transformed, dx_transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
 
 
-Tanto el boxplot como la función de densidad muestran que los casos aprobados suelen tener una deuda 
-relativa menor, lo que es coherente con que los prestamistas 
-aprueben más fácilmente a quienes tienen un endeudamiento controlado respecto a sus ingresos.
 
-Durante el entrenamiento de los modelos comprobaremos si la inclusión de esta variable reporta alguna 
-mejoría respecto a usar únicamente la deuda bruta.
 
 ## Análisis de Componentes Principales (PCA)
 
@@ -1154,14 +1162,11 @@ Terminados el análisis y el preprocesado de los datos pasamos al entrenamiento 
 ## Modelos seleccionados
 Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
 ```{r}
-credit_esfuerzo <- credit.Datos.Train
-credit_esfuerzo$Esfuerzo_financiero <- log10(credit.Datos.Train$Deuda + 1) + log10(credit.Datos.Train$Anos_cotizados + 1)  + abs(log10(credit.Datos.Train$Ingresos + 1)-1)*0.375
 
 credit_no_na<- na.omit(credit.Datos.Train)
-credit_no_na_esfuerzo <- na.omit(credit_esfuerzo)
+credit_no_na_esfuerzo <- na.omit(credit.Datos.Train)
 credit.Var.Salida.Usada <- c("Aprobado")
 credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
-credit.Vars.Entrada.Usadas2 <- setdiff(names(credit_esfuerzo), credit.Var.Salida.Usada)
 ```
 
 Probamos el preprocesado imputando por la mediana (numericas) y la moda (categóricas)
@@ -1290,7 +1295,7 @@ fitControl <- trainControl(
 # set.seed(1234)
 
 credit.ranger <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],  
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],  
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],   
   method = "ranger",                  
   verbose = FALSE,
@@ -1351,10 +1356,10 @@ library(caret)
 set.seed(610)
 
 gbm_grid <- expand.grid(
-  n.trees = c(100, 200, 300),
+  n.trees = c(50, 75, 100),
   interaction.depth = c(3, 5, 7),
   shrinkage = c(0.01, 0.02, 0.03),
-  n.minobsinnode = c(15, 20, 25)
+  n.minobsinnode = c(5, 25,30)
 )
 
 n_folds <- 10
@@ -1378,12 +1383,13 @@ Finalmente, realizamos el entrenamiento del modelo, especificando la columna de 
 
 ```{r}
 gbm_modelo <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
   method = "gbm",
   trControl = fitControl,
   tuneGrid = gbm_grid,
-  verbose = FALSE
+  verbose = FALSE,
+  bag.fraction = 0.75
 )
 
 gbm_modelo
@@ -1504,7 +1510,7 @@ credit.comparison.rpart<- suppressWarnings(train(credit.Datos.Train[credit.Vars.
 
 
 credit.comparison.gbm <- suppressWarnings(train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
   method = 'gbm',
   tuneGrid = gbm_grid,
@@ -1516,7 +1522,7 @@ credit.comparison.gbm <- suppressWarnings(train(
 
 
 credit.comparison.ranger <- suppressWarnings(train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas2],
+  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],  
   method = 'ranger',
   verbose = FALSE,
@@ -1555,10 +1561,8 @@ dotplot(credit.rsamp.comparison, metric = "Accuracy",
 Justifica por qué se selecciona ese modelo final y qué rendimiento tiene sobre el conjunto de test.
 
 ```{r final-eval}
-credit.Datos.Test$DeudaRelativa <- log(1 + credit.Datos.Test$Deuda / (credit.Datos.Test$Ingresos + 1))
-credit.Datos.Test$Esfuerzo_financiero <- log10(credit.Datos.Test$Deuda + 1) + log10(credit.Datos.Test$Anos_cotizados + 1)  + abs(log10(credit.Datos.Test$Ingresos + 1)-1)*0.375
 preds<-predict(gbm_modelo,
-            newdata=credit.Datos.Test[credit.Vars.Entrada.Usadas2])
+            newdata=credit.Datos.Test[credit.Vars.Entrada.Usadas])
 
 table(Predicho = preds, Real = credit.Datos.Test[[credit.Var.Salida.Usada]])
 # caret::confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]], positive = "Positivo", mode = "prec_recall" )
