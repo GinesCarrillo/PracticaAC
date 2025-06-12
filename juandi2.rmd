@@ -79,6 +79,12 @@ if (!requireNamespace("gridExtra", quietly = TRUE)) {
 if (!requireNamespace("GGally", quietly = TRUE)) {
   install.packages("GGally")
 }
+if (!requireNamespace("rpart", quietly = TRUE)) {
+  install.packages("rpart")
+}
+if (!requireNamespace("rpart.plot", quietly = TRUE)) {
+  install.packages("rpart.plot")
+}
 
 
 library(caret)
@@ -1048,7 +1054,7 @@ proseguir sin introducir transformaciones generales en los datos.
 
 ```{r}
 # Definir las variables para aplicar la transformación
-vars_to_transform <- names(credit)[campos_numericos]
+vars_to_transform <- names(credit.Datos.Train)[campos_numericos]
 
 # Iterar sobre cada variable
 for (var in vars_to_transform) {
@@ -1445,7 +1451,7 @@ de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nu
 ```{r}
 credit_copy <- credit
 credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
-campos_numericos_nuevo <- c(campos_numericos, 17)
+campos_numericos_nuevo <- c(campos_numericos, 18)
 
 # Separación de conjuntos
 credit_copy_train <- credit_copy[credit.trainIdx, ]
@@ -1460,7 +1466,7 @@ embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
 ```{r}
 mlp_inputs <- campos_numericos_nuevo
 campos_numericos_nuevo
-mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17)
+mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
 ```
 
 ```{r}
