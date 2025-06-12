@@ -1172,46 +1172,27 @@ explicar prácticamente el 60%.
 Terminados el análisis y el preprocesado de los datos pasamos al entrenamiento de los modelos.
 
 ## Modelos seleccionados
-Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
-```{r}
 
-credit_no_na<- na.omit(credit.Datos.Train)
+Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
+Vamos a utilizar la versión del dataset que hemos definido en el apartado de preprocesado.
+
+```{r}
+credit_no_na <- na.omit(credit.Datos.Train)
 credit_no_na_esfuerzo <- na.omit(credit.Datos.Train)
 credit.Var.Salida.Usada <- c("Aprobado")
 credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
 ```
 
-Probamos el preprocesado imputando por la mediana (numericas) y la moda (categóricas)
-```{r}
-# Copia del dataset original
-df_rf <- credit.Datos.Train
+Los modelos que utilicemos tienen que poder usar tanto de los atributos numéricos como los categóricos,
+aunque no necesariamente los dos tipos a la vez. Incluimos:
 
-# Asegurarse de que la variable de salida es factor
-df_rf[[credit.Var.Salida.Usada]] <- as.factor(df_rf[[credit.Var.Salida.Usada]])
+- rpart: sencillo y lineal
 
-# 1. Variables numéricas: imputar con la mediana
-vars_numericas <- names(df_rf)[sapply(df_rf, is.numeric)]
-for (var in vars_numericas) {
-  if (anyNA(df_rf[[var]])) {
-    med <- median(df_rf[[var]], na.rm = TRUE)
-    df_rf[[var]][is.na(df_rf[[var]])] <- med
-  }
-}
+- rf: complejo y basado en árboles de decisión
 
-# 2. Variables categóricas: imputar con la moda
-vars_categoricas <- names(df_rf)[sapply(df_rf, is.character) | sapply(df_rf, is.factor)]
-moda <- function(x) names(which.max(table(x)))
-for (var in vars_categoricas) {
-  if (anyNA(df_rf[[var]])) {
-    mod <- moda(df_rf[[var]][!is.na(df_rf[[var]])])
-    df_rf[[var]][is.na(df_rf[[var]])] <- mod
-  }
-  df_rf[[var]] <- as.factor(df_rf[[var]])
-}
+- gbm: complejo y basado en descenso de gradiente
 
-# Resultado: df_rf ya tiene todos los NA imputados
-sum(is.na(df_rf))  # debe ser 0
-```
+- nnet: complejo y dentro del paradigma MLP
 
 ### Árboles de decisión (rpart)
 
