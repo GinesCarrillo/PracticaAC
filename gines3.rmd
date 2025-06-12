@@ -79,12 +79,6 @@ if (!requireNamespace("gridExtra", quietly = TRUE)) {
 if (!requireNamespace("GGally", quietly = TRUE)) {
   install.packages("GGally")
 }
-if (!requireNamespace("rpart", quietly = TRUE)) {
-  install.packages("rpart")
-}
-if (!requireNamespace("rpart.plot", quietly = TRUE)) {
-  install.packages("rpart.plot")
-}
 
 
 library(caret)
@@ -573,7 +567,7 @@ afectan a la variable a predecir. Para ello podemos hacer uso de la función
 `spineplot`, que nos muestra para cada valor de una variable tanto su 
 poblacion (ancho) como su tasa de aprobados (alto de la barra azul).
 ```{r}
-par(mfrow = c(5, 2))  #plots en cuadrícula 2x5
+par(mfrow = c(5, 2))  #plots en cuadrícula 3x3
 
 for (var in categorical_vars) {
   spineplot(x = credit[[var]], 
@@ -622,7 +616,7 @@ aciertos de (306+284)/690 ~= 0.855, bastante cercano a lo que obtendremos con t�
 tab <- table(credit$Impago_previo, credit$Aprobado)
 df_plot <- as.data.frame(tab)
 names(df_plot) <- c("Impago_previo", "Aprobado", "Count")
-
+x11()
 ggplot(df_plot, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
   geom_tile(color = "white") +
   geom_text(aes(label=Count), color = "black", size = 6) +
@@ -1053,6 +1047,7 @@ proseguir sin introducir transformaciones generales en los datos.
 ```
 
 ```{r}
+campos_numericos
 # Definir las variables para aplicar la transformación
 vars_to_transform <- names(credit.Datos.Train)[campos_numericos]
 
@@ -1060,6 +1055,7 @@ vars_to_transform <- names(credit.Datos.Train)[campos_numericos]
 for (var in vars_to_transform) {
   # Seleccionar la columna actual
   dx <- credit.Datos.Train[, var, drop = FALSE]
+  dx
   dxTest <- credit.Datos.Test[, var, drop = FALSE]
 
   # Aplicar la transformación Yeo-Johnson
@@ -1077,6 +1073,9 @@ for (var in vars_to_transform) {
 # Limpiar variables temporales
 rm(dx, dx_transformed, dx_transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
+
+
+
 
 ## Análisis de Componentes Principales (PCA)
 
@@ -1155,72 +1154,60 @@ De la componente PC1 podemos saber también cómo se calcula a partir de los cam
     loadings[,1]
 ```
 
-PC1 da más o menos la misma importancia a todas las variables, relacionándose de forma positiva con todas.
-La que tiene un mayor coeficiente es la `Calificacion_crediticia`. Cabe mencionar que estos coeficientes
-se calculan sobre una distribución reescalada para seguir una distribución normal, por lo que es correcto
-el análisis de correlacionar una mayor importancia en la clasificación con respecto al escalar dado por
-la tabla anterior. 
-
-Las cinco componentes PCX aparecen ordenadas según la proporción de la varianza explicada (PVE).
-Podemos verlo para estos datos.
-
-```{r}
-  VE <- pca_res$sdev^2
-  PVE <- VE / sum(VE)
-  round(PVE,2)
-```
-
-La primera componente explica, pues, más de un tercio de la varianza. Junto con la segunda, consiguen
-explicar prácticamente el 60%.
+Las seis componentes aparecen ordenadas según la proporción de la varianza explicada (PVE).
+La PVE de un componente coincide con la proporción del autovalor m-ésimo... (TODO)
 
 # Modelado y entrenamiento
 
 Terminados el análisis y el preprocesado de los datos pasamos al entrenamiento de los modelos.
 
 ## Modelos seleccionados
-
 Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
-Vamos a utilizar la versión del dataset que hemos definido en el apartado de preprocesado.
-
 ```{r}
-credit_no_na <- na.omit(credit.Datos.Train)
+
+credit_no_na<- na.omit(credit.Datos.Train)
 credit_no_na_esfuerzo <- na.omit(credit.Datos.Train)
 credit.Var.Salida.Usada <- c("Aprobado")
 credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
 ```
 
-Los modelos que utilicemos tienen que poder usar tanto de los atributos numéricos como los categóricos,
-aunque no necesariamente los dos tipos a la vez. Incluimos:
+Probamos el preprocesado imputando por la mediana (numericas) y la moda (categóricas)
+```{r}
+# Copia del dataset original
+df_rf <- credit.Datos.Train
 
-- rpart: sencillo y lineal
+# Asegurarse de que la variable de salida es factor
+df_rf[[credit.Var.Salida.Usada]] <- as.factor(df_rf[[credit.Var.Salida.Usada]])
 
-- rf: complejo y basado en árboles de decisión
+# 1. Variables numéricas: imputar con la mediana
+vars_numericas <- names(df_rf)[sapply(df_rf, is.numeric)]
+for (var in vars_numericas) {
+  if (anyNA(df_rf[[var]])) {
+    med <- median(df_rf[[var]], na.rm = TRUE)
+    df_rf[[var]][is.na(df_rf[[var]])] <- med
+  }
+}
 
-- gbm: complejo y basado en descenso de gradiente
+# 2. Variables categóricas: imputar con la moda
+vars_categoricas <- names(df_rf)[sapply(df_rf, is.character) | sapply(df_rf, is.factor)]
+moda <- function(x) names(which.max(table(x)))
+for (var in vars_categoricas) {
+  if (anyNA(df_rf[[var]])) {
+    mod <- moda(df_rf[[var]][!is.na(df_rf[[var]])])
+    df_rf[[var]][is.na(df_rf[[var]])] <- mod
+  }
+  df_rf[[var]] <- as.factor(df_rf[[var]])
+}
 
-- nnet: complejo y dentro del paradigma MLP
+# Resultado: df_rf ya tiene todos los NA imputados
+sum(is.na(df_rf))  # debe ser 0
+```
 
-### Árboles de decisión (rpart)
+### Rpart
 
-Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica
-sencilla como lo son los árboles de decisión. Este tipo de modelo predictivo recibe su nombre por
-tener una estructura de árbol: para clasificar un individuo se parte desde una raíz. En cada nodo,
-según el valor de una determinado atributo, se divide el conjunto de datos en dos o más ramas.
-Este proceso se repite hasta alcanzar una hoja, a la cual se asigna una única categoría.
-Las carácteristicas por las que nos interesamos en este método son:
-
-- Las divisiones pueden realizarse en base a atributos
-tanto numéricos como categóricos, por lo que es capaz de aprovechar los patrones en variables
-cátegoricas sin necesidad de conversión.
-
-- La fácil interpretabilidad de los resultados obtenidos, que puede guiar nuestra elección de otros
-modelos a considerar.
-
-Como punto negativo, esta técnica no es muy potente y tiene propensa al sobreajuste.
-Sin embargo, el objetivo de este ataque, más que obtener una solución final, es informar nuestra
-posterior elección de modeloses, además de establecer unos resultados de clasificación base contra
-los que contrastar los que obtendremos con otros modelos.
-
+Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica sencilla como 
+lo son los árboles de decisión. El objetivo de este ataque, más que obtener una solución final, es establecer 
+un clasificador base contra el que contrastar resultados porsteriores que obtendremos con otros modelos.
 ```{r}
 library(rpart)
 
@@ -1235,19 +1222,17 @@ tree_model <- train(
 )
 
 tree_model
+
+# rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión (rpart)")
+varImp(tree_model)
+tree_model$finalModel$variable.importance
 ```
 
-Hemos hecho uso de `rpart`, con un parámetro `tuneLength` de 10. Hemos probado distintos valores 
+Hemos hecho uso de `rpart`, con un `tuneLength` de 10. Hemos probado distintos valores 
 de este hiperparámetro, pero los resultados que se obtienen son casi siempre los mismos. 
 Con este método, el único hiperpárametro a modificar es el de complejidad `cp`, que toma 
 valores entre 0 y 1. Pues bien, para todo valor entre 0.018 y 0.714, el árbol que se obtiene 
 es exactamente el mismo.
-
-```{r}
-library(rpart.plot)
-
-rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión")
-```
 
 Evaluando los resultados obtenidos, nos damos cuenta que el árbol encontrado con mejor *accuracy* no es otro 
 que el decisor que ya habíamos considerado en la fase de análisis exploratorio: si existe impago previo se rechaza 
@@ -1299,24 +1284,16 @@ fitControl <- trainControl(
   number = n_folds,
   repeats = n_reps,
   verboseIter = FALSE,
-  # index = foldIndexes,
-  # seeds = seeds,
-  #summaryFunction = twoClassSummary,
-  #classProbs = TRUE
 )
 
 
-# cl <- makeCluster(detectCores()-1)
-# registerDoParallel(cl)
-
-# set.seed(1234)
 
 credit.ranger <- train(
   credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],  
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],   
   method = "ranger",                  
   verbose = FALSE,
-  tuneLength = 15,                    
+  tuneLength = 30,                    
   trControl = fitControl,         
   num.trees = 50,                     
   importance = 'impurity'            
@@ -1367,6 +1344,7 @@ En primer lugar, vamos a definir un grid de hiperparámetros para encontrar las 
 Vamos a hacer una exploración para el número de árboles, para la profundidad máxima de los mismos,
 la tasa de aprendizaje y mínimo de observaciones por nodo.
 También fijamos una semilla para poder recrear los resultados.
+
 ```{r}
 library(caret)
 set.seed(1234)
@@ -1451,7 +1429,7 @@ de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nu
 ```{r}
 credit_copy <- credit
 credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
-campos_numericos_nuevo <- c(campos_numericos, 18)
+campos_numericos_nuevo <- c(campos_numericos, 17)
 
 # Separación de conjuntos
 credit_copy_train <- credit_copy[credit.trainIdx, ]
@@ -1466,7 +1444,7 @@ embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
 ```{r}
 mlp_inputs <- campos_numericos_nuevo
 campos_numericos_nuevo
-mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
+mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17)
 ```
 
 ```{r}
@@ -1507,7 +1485,12 @@ plot(mlp_cv)
 ```
 
 # Comparación de modelos
+En esta sección llevamos a cabo la comparación de los cuatro modelos.
 
+Todos los modelos se han entrenado bajo una misma configuración de validación cruzada 
+(10 particiones repetidas 3 veces), utilizando como métrica de evaluación la exactitud (Accuracy). 
+El objetivo es identificar qué modelo se ajusta mejor a los datos y generaliza con mayor 
+eficacia.
 ```{r model-comparison}
 credit.trainCtrl.3cv10.resampAll <- trainControl(
 method = "repeatedcv"
@@ -1547,22 +1530,22 @@ credit.comparison.ranger <- suppressWarnings(train(
   trControl = credit.trainCtrl.3cv10.resampAll
 ))
 
-# credit.comparison.mlp <- suppressWarnings(train(
-#   credit_scaled[mlp_inputs],
-#   credit_scaled[["Aprobado"]],
-#   method = "nnet",
-#   trControl = credit.trainCtrl.3cv10.resampAll,
-#   tuneGrid = expand.grid(
-#     size = c(3, 5, 7, 9, 11),
-#     decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
-#   ),
-#   maxit = 200,
-#   trace = FALSE
-# ))
+credit.comparison.mlp <- suppressWarnings(train(
+  credit_scaled[mlp_inputs],
+  credit_scaled[["Aprobado"]],
+  method = "nnet",
+  trControl = credit.trainCtrl.3cv10.resampAll,
+  tuneGrid = expand.grid(
+    size = c(3, 5, 7, 9, 11),
+    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+  ),
+  maxit = 200,
+  trace = FALSE
+))
 
 ```
 ```{r}
-models <- list(rpart = credit.comparison.rpart, gbm = gbm_modelo, ranger = credit.ranger)#, mlp = credit.comparison.mlp)
+models <- list(rpart = credit.comparison.rpart, gbm = credit.comparison.gbm, ranger = credit.comparison.ranger, mlp = credit.comparison.mlp)
 credit.rsamp.comparison <- resamples(models)
 
 summary(credit.rsamp.comparison)
