@@ -1213,11 +1213,27 @@ for (var in vars_categoricas) {
 sum(is.na(df_rf))  # debe ser 0
 ```
 
-### Rpart
+### Árboles de decisión (rpart)
 
-Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica sencilla como 
-lo son los árboles de decisión. El objetivo de este ataque, más que obtener una solución final, es establecer 
-un clasificador base contra el que contrastar resultados porsteriores que obtendremos con otros modelos.
+Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica
+sencilla como lo son los árboles de decisión. Este tipo de modelo predictivo recibe su nombre por
+tener una estructura de árbol: para clasificar un individuo se parte desde una raíz. En cada nodo,
+según el valor de una determinado atributo, se divide el conjunto de datos en dos o más ramas.
+Este proceso se repite hasta alcanzar una hoja, a la cual se asigna una única categoría.
+Las carácteristicas por las que nos interesamos en este método son:
+
+- Las divisiones pueden realizarse en base a atributos
+tanto numéricos como categóricos, por lo que es capaz de aprovechar los patrones en variables
+cátegoricas sin necesidad de conversión.
+
+- La fácil interpretabilidad de los resultados obtenidos, que puede guiar nuestra elección de otros
+modelos a considerar.
+
+Como punto negativo, esta técnica no es muy potente y tiene propensa al sobreajuste.
+Sin embargo, el objetivo de este ataque, más que obtener una solución final, es informar nuestra
+posterior elección de modeloses, además de establecer unos resultados de clasificación base contra
+los que contrastar los que obtendremos con otros modelos.
+
 ```{r}
 library(rpart)
 
@@ -1232,22 +1248,23 @@ tree_model <- train(
 )
 
 tree_model
-
-# rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión (rpart)")
-varImp(tree_model)
-tree_model$finalModel$variable.importance
 ```
 
-Hemos hecho uso de `rpart`, con un `tuneLength` de 10. Hemos probado distintos valores 
+Hemos hecho uso de `rpart`, con un parámetro `tuneLength` de 10. Hemos probado distintos valores 
 de este hiperparámetro, pero los resultados que se obtienen son casi siempre los mismos. 
 Con este método, el único hiperpárametro a modificar es el de complejidad `cp`, que toma 
 valores entre 0 y 1. Pues bien, para todo valor entre 0.018 y 0.714, el árbol que se obtiene 
 es exactamente el mismo.
 
+```{r}
+library(rpart.plot)
+
+rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión")
+```
+
 Evaluando los resultados obtenidos, nos damos cuenta que el árbol encontrado con mejor *accuracy* no es otro 
 que el decisor que ya habíamos considerado en la fase de análisis exploratorio: si existe impago previo se rechaza 
 la solicitud, si no, se aprueba.
-
 ### Random Forest (ranger)
 
 El siguiente modelo que vamos a utilizar es Random Forest.
