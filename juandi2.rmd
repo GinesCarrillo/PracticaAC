@@ -1010,6 +1010,33 @@ Los valores nulos deben tratarse adecuadamente antes de entrenar modelos de apre
 En nuestro caso, es probable que la mejor opción sea simplemente eliminar las filas con datos faltantes, pues como hemos visto en
 la gráfica anterior, hay muy pocos valores nulos en comparación con el número total de muestras que disponemos.
 
+### Tratamiento de outliers
+
+Utiliando facetas y los diagramas boxplot podemos saber de la existencia de outliers para todas las variables numéricas:
+
+```{r boxplot-outliers, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+
+datos_numericos <- credit.Datos.Train[campos_numericos]
+
+x11()
+#boxplots con facet para cada variable
+ggplot(datos_long, aes(x = "", y = Valor)) +
+  geom_boxplot(outlier.color = "red", fill = "lightblue") +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  labs(title = "Detección de outliers por variable numérica",
+       y = "Valor",
+       x = "") +
+  theme_minimal()
+```
+
+Vemos que la mayoría de atributos sí que presentan outliers. Sin embargo, no hemos encontrado diferencias notables
+entre descartarlos y mantenerlos, pues en la transformación de datos aplicamos la transformación de Yeo-Johnson que 
+prácticamente acaba con todos los outliers al normalizar estas variables.
+
 ### Creación del atributo `EsfuerzoFinanciero`
 Como ya hemos comentado, creemos que el atributo *EsfuerzoFinanciero* puede ser útil pues da buenos
 resultados como predictor. Es por eso que finalmente decidimos añadirlo como variable para entrenar los
@@ -1065,9 +1092,6 @@ for (var in vars_to_transform) {
 
 rm(dx, transformed, transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
-
-### Tratamiento de outliers
-
 
 ## Análisis de Componentes Principales (PCA)
 

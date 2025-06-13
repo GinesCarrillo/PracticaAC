@@ -79,8 +79,21 @@ if (!requireNamespace("gridExtra", quietly = TRUE)) {
 if (!requireNamespace("GGally", quietly = TRUE)) {
   install.packages("GGally")
 }
+if (!requireNamespace("rpart", quietly = TRUE)) {
+  install.packages("rpart")
+}
+if (!requireNamespace("rpart.plot", quietly = TRUE)) {
+  install.packages("rpart.plot")
+}
+if (!requireNamespace("gbm", quietly = TRUE)) {
+  install.packages("gbm")
+}
+if (!requireNamespace("nnet", quietly = TRUE)) {
+  install.packages("nnet")
+}
+library(nnet)
 
-
+library(gbm)
 library(caret)
 library(tidyverse)
 library(ggplot2)
@@ -544,7 +557,7 @@ perdemos la ayuda de la mayor parte de herramientas estadísticas.
 Sin embargo, esto no significa que no podamos extraer información útil de estos campos. 
 Podemos comenzar nuetro análisis graficando un histograma de cada variable categórica.
 ```{r}
-summary(credit)
+summary(credit[campos_categoricos])
 categorical_vars <- names(credit)[campos_categoricos]
 
 # Create a plotting function for categorical variables
@@ -559,7 +572,7 @@ plot_categorical <- function(var_name) {
 
 categorical_plots <- map(categorical_vars, plot_categorical)
 
-grid.arrange(grobs = categorical_plots, ncol = 2)
+grid.arrange(grobs = categorical_plots, ncol = 3)
 ```
 
 Nos gustaría también ver cómo los valores que toman estos campos 
@@ -567,7 +580,7 @@ afectan a la variable a predecir. Para ello podemos hacer uso de la función
 `spineplot`, que nos muestra para cada valor de una variable tanto su 
 poblacion (ancho) como su tasa de aprobados (alto de la barra azul).
 ```{r}
-par(mfrow = c(5, 2))  #plots en cuadrícula 3x3
+par(mfrow = c(3, 3))  #plots en cuadrícula 3x3
 
 for (var in categorical_vars) {
   spineplot(x = credit[[var]], 
@@ -616,7 +629,7 @@ aciertos de (306+284)/690 ~= 0.855, bastante cercano a lo que obtendremos con t�
 tab <- table(credit$Impago_previo, credit$Aprobado)
 df_plot <- as.data.frame(tab)
 names(df_plot) <- c("Impago_previo", "Aprobado", "Count")
-x11()
+
 ggplot(df_plot, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
   geom_tile(color = "white") +
   geom_text(aes(label=Count), color = "black", size = 6) +
@@ -624,7 +637,7 @@ ggplot(df_plot, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
   labs(title = "Tabla de frecuencias de impago previo frente a aprobado",
        x = "Impago previo",
        y = "Aprobado") +
-  theme_minimal(base_size = 12)
+  theme_minimal(base_size = 20)
 ```
 
 ## Análisis multivariable
@@ -902,12 +915,12 @@ En cambio, si utilizamos aquí el predictor `Impago_previo`, vemos como el resul
 
 
 # Preprocesado de datos
+Realizamos ya la división entre Train y Test:
 ```{r preprocessing}
-# Preprocesado 1 y preprocesado 2 para comparar más adelante
-    # Cargar índices de train
+    #cargamos índices de train
     credit.trainIdx <- readRDS("credit.trainIdx")
 
-    # Separación de conjuntos
+    #separamos los dos conjuntos
     credit.Datos.Train <- credit[credit.trainIdx, ]
     credit.Datos.Test <- credit[-credit.trainIdx, ]
 ```
@@ -916,19 +929,19 @@ En cambio, si utilizamos aquí el predictor `Impago_previo`, vemos como el resul
 En primer lugar, veamos si hay valores nulos y cuántos hay en cada columna:
 
 ```{r nulos1}
-# Una sola línea para contar nulos por columna
+#Contamos los nulos con una sola línea
 colSums(is.na(credit))
 
 ```
 
 En una gráfica podemos verlos mejor: 
 ```{r nulos2}
-# Visualización de los nulos con gráfico de barras
+#vemos losnulos con gráfico de barras
 library(ggplot2)
 
 nulos <- colSums(is.na(credit))
 nulos_df <- data.frame(Variable = names(nulos), Nulos = nulos)
-nulos_df <- nulos_df[nulos_df$Nulos > 0, ]  # Solo mostrar columnas con nulos
+nulos_df <- nulos_df[nulos_df$Nulos > 0, ]  # Solo mostramos las columnas que tengan nulos
 
 ggplot(nulos_df, aes(x = reorder(Variable, -Nulos), y = Nulos)) +
   geom_bar(stat = "identity", fill = "tomato") +
@@ -946,19 +959,16 @@ Para ello vamos a ver la frecuencia del número de atributos faltantes. Ya traba
 no debemos modificar los datos de Test a partir de ahora.
 
 ```{r faltantes}
-# Número de valores NA por fila
+#numero de valores NA por fila
 na_por_fila <- rowSums(is.na(credit.Datos.Train ))
 
-# Observaciones con al menos un NA
+#observaciones con al menos un NA
 con_na <- na_por_fila[na_por_fila > 0]
 length(con_na)  # ¿Cuántas observaciones tienen al menos un NA?
 
-# Tabla resumen
 table(con_na)
 
-# Histograma: cuántos atributos faltan por observación (entre las que tienen algún NA)
 library(ggplot2)
-
 ggplot(data.frame(Faltantes = con_na), aes(x = Faltantes)) +
   geom_bar(fill = "steelblue") +
   labs(title = "Nº de atributos faltantes por observación",
@@ -978,10 +988,10 @@ valores faltantes,
 se conservarán y se decidirá si se inputan o no posteriormente.
 
 ```{r faltantes2}
-# Eliminar observaciones con más de 4 atributos faltantes
+#eliminamos las observaciones con más de 4 atributos faltantes
 credit.Datos.Train <- credit.Datos.Train[na_por_fila <= 4, ]
 
-# Verificamos tamaño tras limpieza
+#verificamos tamaño tras limpieza
 nrow(credit.Datos.Train)
 ```
 
@@ -999,6 +1009,33 @@ Los valores nulos deben tratarse adecuadamente antes de entrenar modelos de apre
 
 En nuestro caso, es probable que la mejor opción sea simplemente eliminar las filas con datos faltantes, pues como hemos visto en
 la gráfica anterior, hay muy pocos valores nulos en comparación con el número total de muestras que disponemos.
+
+### Tratamiento de outliers
+
+Utiliando facetas y los diagramas boxplot podemos saber de la existencia de outliers para todas las variables numéricas:
+
+```{r boxplot-outliers, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+
+datos_numericos <- credit.Datos.Train[campos_numericos]
+
+x11()
+#boxplots con facet para cada variable
+ggplot(datos_long, aes(x = "", y = Valor)) +
+  geom_boxplot(outlier.color = "red", fill = "lightblue") +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  labs(title = "Detección de outliers por variable numérica",
+       y = "Valor",
+       x = "") +
+  theme_minimal()
+```
+
+Vemos que la mayoría de atributos sí que presentan outliers. Sin embargo, no hemos encontrado diferencias notables
+entre descartarlos y mantenerlos, pues en la transformación de datos aplicamos la transformación de Yeo-Johnson que 
+prácticamente acaba con todos los outliers al normalizar estas variables.
 
 ### Creación del atributo `EsfuerzoFinanciero`
 Como ya hemos comentado, creemos que el atributo *EsfuerzoFinanciero* puede ser útil pues da buenos
@@ -1029,7 +1066,8 @@ para que una variable siga una distribución normal. La principal limitación es
 - Yeo-Johnson: Es una extensión de la transformación Box-Cox que sí permite trabajar 
   con valores negativos y con valores iguales a 0.
 
-Tras probar las 4 alternativas, nos dimos cuenta que con Yeo-Johnson se obtenían ligeras mejoras en el modelo gbm.
+Tras probar las 4 alternativas, nos dimos cuenta que con Yeo-Johnson se obtenían ligeras mejoras sobre todo
+en el modelo gbm.
 El resto obtenían resultados muy similares con todas las transformaciones, por lo que decidimos quedarnos trabajar
 con la transformación de Yeo-Johnson para no tener que distinguir casos para cada uno de los modelos:
 
@@ -1054,9 +1092,6 @@ for (var in vars_to_transform) {
 
 rm(dx, transformed, transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
-
-
-
 
 ## Análisis de Componentes Principales (PCA)
 
@@ -1135,60 +1170,71 @@ De la componente PC1 podemos saber también cómo se calcula a partir de los cam
     loadings[,1]
 ```
 
-Las seis componentes aparecen ordenadas según la proporción de la varianza explicada (PVE).
-La PVE de un componente coincide con la proporción del autovalor m-ésimo... (TODO)
+PC1 da más o menos la misma importancia a todas las variables, relacionándose de forma positiva con todas.
+La que tiene un mayor coeficiente es la `Calificacion_crediticia`. Cabe mencionar que estos coeficientes
+se calculan sobre una distribución reescalada para seguir una distribución normal, por lo que es correcto
+el análisis de correlacionar una mayor importancia en la clasificación con respecto al escalar dado por
+la tabla anterior. 
+
+Las cinco componentes PCX aparecen ordenadas según la proporción de la varianza explicada (PVE).
+Podemos verlo para estos datos.
+
+```{r}
+  VE <- pca_res$sdev^2
+  PVE <- VE / sum(VE)
+  round(PVE,2)
+```
+
+La primera componente explica, pues, más de un tercio de la varianza. Junto con la segunda, consiguen
+explicar prácticamente el 60%.
 
 # Modelado y entrenamiento
 
 Terminados el análisis y el preprocesado de los datos pasamos al entrenamiento de los modelos.
 
 ## Modelos seleccionados
-Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
-```{r}
 
-credit_no_na<- na.omit(credit.Datos.Train)
-credit_no_na_esfuerzo <- na.omit(credit.Datos.Train)
+Seleccionamos la variable que vamos a usar como salida (Aprobado) y el resto se utilizarán como entrada.
+Vamos a utilizar la versión del dataset que hemos definido en el apartado de preprocesado.
+
+```{r}
+credit_no_na <- na.omit(credit.Datos.Train)
 credit.Var.Salida.Usada <- c("Aprobado")
 credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
 ```
 
-Probamos el preprocesado imputando por la mediana (numericas) y la moda (categóricas)
-```{r}
-# Copia del dataset original
-df_rf <- credit.Datos.Train
+Los modelos que utilicemos tienen que poder usar tanto de los atributos numéricos como los categóricos,
+aunque no necesariamente los dos tipos a la vez. Incluimos:
 
-# Asegurarse de que la variable de salida es factor
-df_rf[[credit.Var.Salida.Usada]] <- as.factor(df_rf[[credit.Var.Salida.Usada]])
+- rpart: sencillo y lineal
 
-# 1. Variables numéricas: imputar con la mediana
-vars_numericas <- names(df_rf)[sapply(df_rf, is.numeric)]
-for (var in vars_numericas) {
-  if (anyNA(df_rf[[var]])) {
-    med <- median(df_rf[[var]], na.rm = TRUE)
-    df_rf[[var]][is.na(df_rf[[var]])] <- med
-  }
-}
+- rf: complejo y basado en árboles de decisión
 
-# 2. Variables categóricas: imputar con la moda
-vars_categoricas <- names(df_rf)[sapply(df_rf, is.character) | sapply(df_rf, is.factor)]
-moda <- function(x) names(which.max(table(x)))
-for (var in vars_categoricas) {
-  if (anyNA(df_rf[[var]])) {
-    mod <- moda(df_rf[[var]][!is.na(df_rf[[var]])])
-    df_rf[[var]][is.na(df_rf[[var]])] <- mod
-  }
-  df_rf[[var]] <- as.factor(df_rf[[var]])
-}
+- gbm: complejo y basado en descenso de gradiente
 
-# Resultado: df_rf ya tiene todos los NA imputados
-sum(is.na(df_rf))  # debe ser 0
-```
+- nnet: complejo y dentro del paradigma MLP
 
-### Rpart
+### Árboles de decisión (rpart)
 
-Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica sencilla como 
-lo son los árboles de decisión. El objetivo de este ataque, más que obtener una solución final, es establecer 
-un clasificador base contra el que contrastar resultados porsteriores que obtendremos con otros modelos.
+Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica
+sencilla como lo son los árboles de decisión. Este tipo de modelo predictivo recibe su nombre por
+tener una estructura de árbol: para clasificar un individuo se parte desde una raíz. En cada nodo,
+según el valor de una determinado atributo, se divide el conjunto de datos en dos o más ramas.
+Este proceso se repite hasta alcanzar una hoja, a la cual se asigna una única categoría.
+Las carácteristicas por las que nos interesamos en este método son:
+
+- Las divisiones pueden realizarse en base a atributos
+tanto numéricos como categóricos, por lo que es capaz de aprovechar los patrones en variables
+cátegoricas sin necesidad de conversión.
+
+- La fácil interpretabilidad de los resultados obtenidos, que puede guiar nuestra elección de otros
+modelos a considerar.
+
+Como punto negativo, esta técnica no es muy potente y tiene propensa al sobreajuste.
+Sin embargo, el objetivo de este ataque, más que obtener una solución final, es informar nuestra
+posterior elección de modelos, además de establecer unos resultados de clasificación base contra
+los que contrastar los que obtendremos con otros modelos.
+
 ```{r}
 library(rpart)
 
@@ -1203,17 +1249,19 @@ tree_model <- train(
 )
 
 tree_model
-
-# rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión (rpart)")
-varImp(tree_model)
-tree_model$finalModel$variable.importance
 ```
 
-Hemos hecho uso de `rpart`, con un `tuneLength` de 10. Hemos probado distintos valores 
+Hemos hecho uso de `rpart`, con un parámetro `tuneLength` de 10. Hemos probado distintos valores 
 de este hiperparámetro, pero los resultados que se obtienen son casi siempre los mismos. 
 Con este método, el único hiperpárametro a modificar es el de complejidad `cp`, que toma 
 valores entre 0 y 1. Pues bien, para todo valor entre 0.018 y 0.714, el árbol que se obtiene 
 es exactamente el mismo.
+
+```{r}
+library(rpart.plot)
+
+rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, main = "Árbol de Decisión")
+```
 
 Evaluando los resultados obtenidos, nos damos cuenta que el árbol encontrado con mejor *accuracy* no es otro 
 que el decisor que ya habíamos considerado en la fase de análisis exploratorio: si existe impago previo se rechaza 
@@ -1237,7 +1285,7 @@ Los dos hiperparámetros más influyentes para optimizar el rendimiento del mode
 - **mtry**: Controla el número de variables predictoras que se consideran aleatoriamente 
 en cada división de un nodo al construir un árbol individual.
 
-- **splitrule** Define el criterio utilizado para decidir cómo se realiza la mejor división en cada nodo de un árbol. 
+- **splitrule**: Define el criterio utilizado para decidir cómo se realiza la mejor división en cada nodo de un árbol. 
   Las opciones disponibles para esta parámetro son:
 
     - gini (por defecto): Utiliza el índice de Gini para medir la impureza. 
@@ -1265,13 +1313,21 @@ fitControl <- trainControl(
   number = n_folds,
   repeats = n_reps,
   verboseIter = FALSE,
+  # index = foldIndexes,
+  # seeds = seeds,
+  #summaryFunction = twoClassSummary,
+  #classProbs = TRUE
 )
 
 
+# cl <- makeCluster(detectCores()-1)
+# registerDoParallel(cl)
+
+# set.seed(1234)
 
 credit.ranger <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],  
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],   
+  credit_no_na[credit.Vars.Entrada.Usadas],  
+  credit_no_na[[credit.Var.Salida.Usada]],   
   method = "ranger",                  
   verbose = FALSE,
   tuneLength = 15,                    
@@ -1322,9 +1378,15 @@ Escogemos gbm ya que:
 - Perfecto para clasificación binaria con la función de pérdida de desviación binaria (por defecto). 
 
 En primer lugar, vamos a definir un grid de hiperparámetros para encontrar las condiciones ideales con las que utilizar gbm.
-Vamos a hacer una exploración para el número de árboles, para la profundidad máxima de los mismos,
-la tasa de aprendizaje y mínimo de observaciones por nodo.
+Vamos a hacer una exploración para el número de árboles (n.trees), para la profundidad máxima de los mismos (interaction.depth),
+la tasa de aprendizaje (shrinkage) y mínimo de observaciones por nodo (n.minobsinnode).
 También fijamos una semilla para poder recrear los resultados.
+
+Para la creación del grid seguimos el método de ajustar al grano. En primer lugar empezamos con valores de n.trees 
+en un mayor rango (100, 200, 300). Nos dimos cuenta que funcionaba mejor con valores más bajos, por lo que ajustamos a (25,50,75).
+Como el que mejor estaba funcionando era 50, ajustamos a (45, 50, 55) que fueron los valores que finalmente utilizamos.
+De forma similar para los otros tres parámetros.
+
 
 ```{r}
 library(caret)
@@ -1358,11 +1420,11 @@ Finalmente, realizamos el entrenamiento del modelo, especificando la columna de 
 
 ```{r}
 gbm_modelo <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]], 
   method = "gbm",
   trControl = fitControl,
-  tuneGrid=gbm_grid,
+  tuneGrid = gbm_grid,
   verbose = FALSE,
   bag.fraction = 0.75
 )
@@ -1391,11 +1453,13 @@ plot(gbm_modelo, metric = "Accuracy", plotType = "scatter", ylim = c(0.85, 0.89)
 En lo relativo a la importancia de las variables, podemos observarla ejecutando el siguiente comando:
 
 ```{r}
-# varImp.gbm(gbm_modelo)
+
+varImp(gbm_modelo)
 ```
 
-Nuevamente, el impago previo es la variable más determinante, de ahí que se esté tomando una
-profundidad de 1. Los predictores se están haciendo con este campo.
+Nuevamente, el impago previo es la variable más determinante. Sorprendentemente, Nivel_educativo es
+el segundo con mayor importancia. También cabe destacar que Esfuerzo_financiero, la variable que hemos
+creado nosotros es una de las que tiene mayor relevancia.
 
 ### Multi Layer Perceptron
 
@@ -1409,8 +1473,9 @@ de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nu
 
 ```{r}
 credit_copy <- credit
+credit_copy$Esfuerzo_financiero <- credit_copy$Deuda + credit_copy$Anos_cotizados  + abs(credit_copy$Ingresos-1)*0.375
 credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
-campos_numericos_nuevo <- c(campos_numericos, 17)
+campos_numericos_nuevo <- c(campos_numericos, 18)
 
 # Separación de conjuntos
 credit_copy_train <- credit_copy[credit.trainIdx, ]
@@ -1425,12 +1490,10 @@ embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
 ```{r}
 mlp_inputs <- campos_numericos_nuevo
 campos_numericos_nuevo
-mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17)
+mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
 ```
 
 ```{r}
-if (!requireNamespace("nnet", quietly = TRUE)) install.packages("nnet")
-library(nnet)
 
 credit_no_na <- credit_copy_train
 #tomamos logaritmo de variables en campos_log
@@ -1466,6 +1529,7 @@ plot(mlp_cv)
 ```
 
 # Comparación de modelos
+
 En esta sección llevamos a cabo la comparación de los cuatro modelos.
 
 Todos los modelos se han entrenado bajo una misma configuración de validación cruzada 
@@ -1491,8 +1555,8 @@ credit.comparison.rpart<- suppressWarnings(train(credit.Datos.Train[credit.Vars.
 
 
 credit.comparison.gbm <- suppressWarnings(train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]], 
   method = 'gbm',
   tuneGrid = gbm_grid,
   verbose = FALSE,
@@ -1503,8 +1567,8 @@ credit.comparison.gbm <- suppressWarnings(train(
 
 
 credit.comparison.ranger <- suppressWarnings(train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],  
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]],  
   method = 'ranger',
   verbose = FALSE,
   metric = "Accuracy",
@@ -1512,18 +1576,18 @@ credit.comparison.ranger <- suppressWarnings(train(
   trControl = credit.trainCtrl.3cv10.resampAll
 ))
 
-# credit.comparison.mlp <- suppressWarnings(train(
-#   credit_scaled[mlp_inputs],
-#   credit_scaled[["Aprobado"]],
-#   method = "nnet",
-#   trControl = credit.trainCtrl.3cv10.resampAll,
-#   tuneGrid = expand.grid(
-#     size = c(3, 5, 7, 9, 11),
-#     decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
-#   ),
-#   maxit = 200,
-#   trace = FALSE
-# ))
+credit.comparison.mlp <- suppressWarnings(train(
+  credit_scaled[mlp_inputs],
+  credit_scaled[["Aprobado"]],
+  method = "nnet",
+  trControl = credit.trainCtrl.3cv10.resampAll,
+  tuneGrid = expand.grid(
+    size = c(3, 5, 7, 9, 11),
+    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+  ),
+  maxit = 200,
+  trace = FALSE
+))
 
 ```
 ```{r}
@@ -1557,7 +1621,15 @@ confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]])
 
 # Conclusiones
 
+En esta práctica hemos realizado un análisis completo de un dataset
+muy completo desde el punto de vista académico, ya que mantiene un equilibrio
+entre los tipos de atributos y requiere una reflexión sobre el Tratamiento
+de outliers y valores nulos.
 
+El análisis exploratorio de datos mostró una gran influencia del campo `Impago_previo`
+en la clasificación de los individuos. Por ello, tanto los modelos predictivos hechos
+a mano como los modelos de aprendizaje automático han dado la mayor importancia a este
+campo. 
 
 # Anexos
 
