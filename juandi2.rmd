@@ -15,7 +15,8 @@ output:
 
 # Introducción
 
-Este documento es la memoria de nuestra práctica para la asignatura *Aprendizaje Computacional* de la Mención en Computación del Grado de Informática
+Este documento es la memoria de nuestra práctica para la asignatura *Aprendizaje Computacional* de la Mención en 
+Computación del Grado de Informática
 de la Universidad de Murcia.
 
 El proyecto consiste en el estudio de diferentes modelos de aprendizaje automático. Para ello, se ha utilizado la base de datos
@@ -91,6 +92,12 @@ if (!requireNamespace("gbm", quietly = TRUE)) {
 if (!requireNamespace("nnet", quietly = TRUE)) {
   install.packages("nnet")
 }
+if (!requireNamespace("tidyr", quietly = TRUE)) {
+  install.packages("tidyr")
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+}
 library(nnet)
 
 library(gbm)
@@ -99,15 +106,17 @@ library(tidyverse)
 library(ggplot2)
 library(gridExtra)
 library(GGally)
+library(tidyr)
+library(dplyr)
 
-# Cargar dataset
+#cargamos dataset
 url <- "https://archive.ics.uci.edu/static/public/27/credit+approval.zip"
 
-# Download and unzip the dataset
+
 temp <- tempfile()
 download.file(url, temp)
 unzip(temp, exdir = "./credit")
-unlink(temp)  # Remove temporary file
+unlink(temp)  
 
 credit <- read.table("./credit/crx.data", sep = ",", na.strings ="?")
 
@@ -169,7 +178,6 @@ campos_numericos = c(2, 3, 8, 11, 14, 15)
 campos_log = c(8, 11, 15)
 campos_no_log = setdiff(campos_numericos, campos_log)
 campos_categoricos = setdiff(campos, campos_numericos)
-#campos_categoricos = c("Sexo", "Estado_civil", "Es_cliente", "Nivel_educativo", "Etnia", "Impago_previo", "Trabaja", "Licenc", "Ciudadano", "Aprobado") #nolint
 credit[campos_categoricos] <- lapply(credit[campos_categoricos], FUN = factor)
 lapply(credit[campos_categoricos], FUN = levels)
 
@@ -192,7 +200,7 @@ pues la forma de tratarlos es completamente distinta.
 Para los atributos numéricos, es interesante como punto de partida mostrar su valor mínimo,
 máximo, los cuartiles, la media y la mediana.
 ```{r}
-# Tabla con los atributos
+#tabla con los atributos
 atributosNum <- credit[,c(2,3,8,11,14,15)]
 
 summary(atributosNum)
@@ -203,14 +211,11 @@ con la distribución que siguen dichos atributos.
 
 ```{r}
 
-
-# Crear una lista para guardar los histogramas
 plots <- list()
 
 for (i in campos_numericos) {
   var <- names(credit)[i]
   var_data <- na.omit(credit[[var]])
-# Saltar si la columna no tiene datos suficientes
   if (length(var_data) < 2) next
   df_temp <- data.frame(valor = var_data)
   
@@ -232,13 +237,11 @@ mucha información al representarse con el histograma. Utilizando escala logarí
 ```{r}
 
 
-# Crear una lista para guardar los histogramas
 plots <- list()
 
 for (i in campos_log) {
     var <- names(credit)[i]
     var_data <- na.omit(credit[[var]])
-    # Saltar si la columna no tiene datos suficientes o si hay valores no positivos
     var_data_log <- var_data[var_data > 0]
     if (length(var_data_log) < 2) next
     df_temp <- data.frame(valor = log(var_data_log))
@@ -269,22 +272,17 @@ Para ello utilizamos qqplot para comparar la función de distribución de nuestr
 
 ```{r}
 
-library(ggplot2)
-library(gridExtra)
-
-# Lista para guardar los Q-Q plots
 qqplots <- list()
 
 for (i in campos_numericos) {
   var <- names(credit)[i]
   var_data <- na.omit(credit[[i]])
 
-  # Saltar si hay pocos datos
   if (length(var_data) < 3) next
 
   df_temp <- data.frame(valor = var_data)
 
-  # Q-Q plot usando stat_qq
+  #Q-Q plot usando stat_qq
   p <- ggplot(df_temp, aes(sample = valor)) +
     stat_qq() +
     stat_qq_line(color = "red") +
@@ -294,7 +292,7 @@ for (i in campos_numericos) {
   qqplots[[var]] <- p
 }
 
-# Mostrar todos los Q-Q plots en una cuadrícula
+#mostramos todos los Q-Q plots en una cuadrícula
 grid.arrange(grobs = qqplots, ncol = 3)
 
 ```
@@ -311,23 +309,17 @@ Siguiendo el razonamiento anterior, parece convenienente comprobar si las variab
 siguen una distribución lognormal. Para ello simplemente repetimos el procedimiento anterior con las variables tras aplicarle el logaritmo:
 
 ```{r}
-
-library(ggplot2)
-library(gridExtra)
-
-# Lista para guardar los Q-Q plots
 qqplots <- list()
 
 for (i in campos_log) {
   var <- names(credit)[i]
   var_data <- na.omit(credit[[var]])
-# Saltar si la columna no tiene datos suficientes o si hay valores no positivos
   var_data_log <- var_data[var_data > 0]
   if (length(var_data_log) < 2) next
   df_temp <- data.frame(valor = log(var_data_log))
 
 
-  # Q-Q plot usando stat_qq
+  #Q-Q plot usando stat_qq
   p <- ggplot(df_temp, aes(sample = valor)) +
     stat_qq() +
     stat_qq_line(color = "red") +
@@ -337,23 +329,21 @@ for (i in campos_log) {
   qqplots[[var]] <- p
 }
 
-# Mostrar todos los Q-Q plots en una cuadrícula
+#mostramos todos los Q-Q plots en una cuadrícula
 grid.arrange(grobs = qqplots, ncol = 3)
 
 ```
 
 Vemos que estas tres variables se ajustan mucho mejor a una distribución lognormal que a una normal.
-Ahora vamos a centrarnos en tres predictores en concreto: `Ingresos`, `Deuda` y `Calificacion_crediticia`.
+Ahora vamos a centrarnos en dos predictores en concreto: `Ingresos`y `Deuda`.
 
 #### Análisis univariable del predictor `Ingresos`
 
 ```{r ingresos1}
-library(ggplot2)
-
-# Eliminamos NA por seguridad
+#eliminamos los valores NA
 ingresos <- na.omit(credit$Ingresos)
 
-# Estadísticos básicos
+#Visualizamos los estadísticos básicos
 summary(ingresos)
 sd(ingresos)
 ```
@@ -375,6 +365,7 @@ La variable `Ingresos` presenta una distribución altamente asimétrica, con una
 valores bajos y una cola larga hacia la derecha. 
 Esto se confirma con el histograma y el boxplot, donde se observan muchos valores en cero y varios outliers.
 
+Para comprobar si sigue una distribución normal podemos utilizar el test de Shapiro-Wilk:
 ```{r ingresos3}
 # Test de Shapiro-Wilk para normalidad
 shapiro.test(ingresos)
@@ -389,6 +380,7 @@ shapiro.test(log_ingresos)
 
 La prueba de Shapiro-Wilk sobre los ingresos originales da como resultado un p-valor muy bajo, 
 indicando que no siguen una distribución normal. 
+
 Tras aplicar una transformación logarítmica (log(Ingresos + 1)), la distribución mejora notablemente en forma, 
 aunque el p-valor obtenido sigue siendo muy bajo, lo que nos confirma que tampoco sigue una distribución lognormal.
 El Q-Q plot también muestra una mejor alineación con la recta teórica tras la transformación.
@@ -407,6 +399,7 @@ qqline(log_ingresos, col = "red")
 Nuestra siguiente intención es comprobar si este predictor sirve como una buena primera aproximación 
 para distinguir entre personas a las que se le concedió el crédito y a las que no. Para ello, dividimos 
 la población total entre aprobados y no aprobados y representamos con un boxplot cada una.
+
 ```{r ingresos-vs-aprobado}
 # Eliminar NA
 df_ingresos <- credit[!is.na(credit$Ingresos) & !is.na(credit$Aprobado), ]
@@ -420,13 +413,12 @@ ggplot(df_ingresos, aes(x = Aprobado, y = Ingresos, fill = Aprobado)) +
   theme_minimal()
 ```
 
-Al tratarse la mayoría de valores muy cercanos a cero perdemos mucha información al visualizar la gráfica.
+Al tratarse la mayoría de valores muy cercanos a cero perdemos casi toda información al visualizar la gráfica.
 No obstante sí que nos damos cuenta de que a todos los outliers (personas con ingresos muy por encima de la media)
 se les concede el crédito, lo que nos hace pensar que puede ser un buen predictor.
 Para visualizar mejor el boxplot, transformamos los datos a escala logaritmica:
 
 ```{r ingresos-vs-aprobado2}
-  # También puedes ver la versión log-transformada (opcional)
 df_ingresos$log_ingresos <- log(df_ingresos$Ingresos + 1)
 
 ggplot(df_ingresos, aes(x = Aprobado, y = log_ingresos, fill = Aprobado)) +
@@ -440,7 +432,7 @@ ggplot(df_ingresos, aes(x = Aprobado, y = log_ingresos, fill = Aprobado)) +
 
 En este diagrama sí que se aprecia mucho mejor que a la gente que se le concedió el crédito tiene de media muchos más 
 ingresos, confirmando así nuestra teoría. Podemos mostrar también las funciones de densidad para cada una de las clases, 
-en escala logarítmica para una mejor visualización.
+en escala logarítmica para una mejor visualización:
 
 ```{r ingresos-vs-aprobado3}
 ggplot(df_ingresos, aes(x = log_ingresos, fill = Aprobado)) +
@@ -467,11 +459,11 @@ sd(deuda)
 
 # Histograma y Boxplot
 p1 <- ggplot(data.frame(Deuda = deuda), aes(x = Deuda)) +
-  geom_histogram(bins = 30, fill = "darkseagreen", color = "black") +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   labs(title = "Histograma de Deuda")
 
 p2 <- ggplot(data.frame(Deuda = deuda), aes(y = Deuda)) +
-  geom_boxplot(fill = "tomato") +
+  geom_boxplot(fill = "skyblue") +
   labs(title = "Boxplot de Deuda")
 
 gridExtra::grid.arrange(p1, p2, ncol = 2)
@@ -544,18 +536,15 @@ ggplot(df_deuda, aes(x = log_deuda, fill = Aprobado)) +
 
 ```
 
-```{r deuda8}
-
-
-```
-
 
 ### Atributos categóricos
+
 El estudio de campos categóricos es limitado en comparación con el de campos numéricos.
 Al no existir orden ni distancia entre valores de los atributos, 
 perdemos la ayuda de la mayor parte de herramientas estadísticas. 
 Sin embargo, esto no significa que no podamos extraer información útil de estos campos. 
 Podemos comenzar nuetro análisis graficando un histograma de cada variable categórica.
+
 ```{r}
 summary(credit[campos_categoricos])
 categorical_vars <- names(credit)[campos_categoricos]
@@ -572,7 +561,7 @@ plot_categorical <- function(var_name) {
 
 categorical_plots <- map(categorical_vars, plot_categorical)
 
-grid.arrange(grobs = categorical_plots, ncol = 3)
+grid.arrange(grobs = categorical_plots, ncol = 2)
 ```
 
 Nos gustaría también ver cómo los valores que toman estos campos 
@@ -580,7 +569,7 @@ afectan a la variable a predecir. Para ello podemos hacer uso de la función
 `spineplot`, que nos muestra para cada valor de una variable tanto su 
 poblacion (ancho) como su tasa de aprobados (alto de la barra azul).
 ```{r}
-par(mfrow = c(3, 3))  #plots en cuadrícula 3x3
+par(mfrow = c(5,2))  #plots en cuadrícula 5x2
 
 for (var in categorical_vars) {
   spineplot(x = credit[[var]], 
@@ -596,7 +585,7 @@ for (var in categorical_vars) {
 par(mfrow = c(1, 1))
 ```
 
-Como punto de interés adicional, representemos también etnia frente a ciudadanía.
+Como punto de interés adicional, representemos también etnia frente a ciudadanía:
 ```{r}
 spineplot(credit$Etnia, credit$Ciudadano,
           xlab = "Etnia",
@@ -612,14 +601,13 @@ En el plot de `Etnia` frente a `Ciudadanía`, vemos que no existen grandes varia
 distribuciones de ciudadanía entre distintas etnias. Esto nos hace pensar que no estamos tratando 
 con datos provenientes de un único país. Si fuese así, la etnia mayoritaria tendría probablemente 
 un porcentaje de miembros ciudadanos muy superior al resto. Debemos suponer entonces, que aunque 
-los datos provengan de un banco japonés, sus clientes están distribuidos por vairos países, y 
+los datos provengan de un banco japonés, sus clientes están distribuidos por varios países, y 
 el campo `Es_ciudadano` hace referencia a la cuidadanía respecto al país en el que residen. 
 
-`Trabaja`, puesto que una persona con trabajo tiene mucha más facilidad para recibir aprobación por 
-parte de un banco, resulta bastante claro que "t" y "f" se corresponden con tener y no tener  
-trabajo, respectivamente.
+`Trabaja`: puesto que una persona con trabajo tiene mucha más facilidad para recibir aprobación por 
+parte de un banco, resulta bastante claro que "t" y "f" se corresponden con tener y no tener trabajo, respectivamente.
 
-`Impago previo`, de manera bastante inmediata, el valor "f" de impago previo representa presencia 
+`Impago previo`: vemos de manera bastante inmediata que el valor "f" representa presencia 
 de impagos por su terrible impacto en la tasa de aprobado (al contrario de lo que el nombre del 
 campo pueda dar a entender). "t" significaría entonces ausencia de impagos. El valor de esta 
 variable es un factor muy importante a la hora de decidir si se aprueba o no la solicitud. Tanto 
@@ -637,7 +625,7 @@ ggplot(df_plot, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
   labs(title = "Tabla de frecuencias de impago previo frente a aprobado",
        x = "Impago previo",
        y = "Aprobado") +
-  theme_minimal(base_size = 20)
+  theme_minimal(base_size = 12)
 ```
 
 ## Análisis multivariable
@@ -659,7 +647,7 @@ Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones l
 
 ```{r eda-multi}
 
-# Función para mostrar R^2 en los paneles superiores
+#función para mostrar R^2 en los paneles superiores
   cor_plus_r2_fun <- function(data, mapping, ...) {
     x <- eval_data_col(data, mapping$x)
     y <- eval_data_col(data, mapping$y)
@@ -668,15 +656,15 @@ Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones l
     df <- data.frame(x = x, y = y, clase = class_var)
     df <- df[complete.cases(df), ]
 
-    # Correlaciones
+    #Correlaciones
     r_total <- cor(df$x, df$y)
     r_plus  <- tryCatch(cor(df$x[df$clase == "Aprobado"], df$y[df$clase == "Aprobado"]), error = function(e) NA)
     r_minus <- tryCatch(cor(df$x[df$clase == "Rechazado"], df$y[df$clase == "Rechazado"]), error = function(e) NA)
 
-    # R2
+    #R2
     r2 <- tryCatch(summary(lm(y ~ x, data = df))$r.squared, error = function(e) NA)
 
-    # Formato
+    #Formato
     txt <- paste0(
       "Corr: ", sprintf("%.3f", r_total), "\n",
       "-: ", sprintf("%.3f", r_minus), "\n",
@@ -690,7 +678,7 @@ Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones l
       theme_void()
   }
 
-  # Subconjunto con las variables numéricas
+  #Subconjunto con las variables numéricas
   subset_credit <- credit[, c("Edad", "Deuda", "Anos_cotizados", "Calificacion_crediticia", "Ingresos", "Aprobado")]
   subset_credit$Deuda <- log10(subset_credit$Deuda + 1)
   subset_credit$Anos_cotizados <- log10(subset_credit$Anos_cotizados + 1)
@@ -698,7 +686,7 @@ Así, se estabilizamos las varianzas y favorecemos el análisis de regresiones l
   subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
 
   
-  # Graficar con color por clase
+  #Graficamos con color por clase
   ggpairs(subset_credit,
           mapping = aes(color = Aprobado, alpha = 0.5),
           columns = 1:5,
@@ -724,7 +712,7 @@ datos no son los idóneos para una regresión lineal.
 
 Como separador, el par `Edad`-`Deuda` es el peor de todos, ya que las distribuciones de ambas clases se solapan demasiado. 
 Todos los pares en los que aparece la calificación crediticia son buenas elecciones de separadores;
-no por ser un buen par, sino que como discutimos en el análisis monovariable, la calificación crediticia es en sí misma un buen separador.
+no por ser un buen par, sino porque la calificación crediticia es en sí misma un buen separador.
 El par `Deuda`-`Anos_cotizados` es quizá el mejor separador bidimensional de la tabla.
 Se puede apreciar que un corte diagonal (recta y=1.5-x) se consigue una buena separación de los puntos rojos y azules.
 
@@ -778,7 +766,7 @@ Si repetimos la matriz de correlaciones para este dataset:
 
 ```{r eda-multi2}
 
-# Función para mostrar R^2 en los paneles superiores
+#función para mostrar R^2 en los paneles superiores
   cor_plus_r2_fun <- function(data, mapping, ...) {
     x <- eval_data_col(data, mapping$x)
     y <- eval_data_col(data, mapping$y)
@@ -787,15 +775,15 @@ Si repetimos la matriz de correlaciones para este dataset:
     df <- data.frame(x = x, y = y, clase = class_var)
     df <- df[complete.cases(df), ]
 
-    # Correlaciones
+    #Correlaciones
     r_total <- cor(df$x, df$y)
     r_plus  <- tryCatch(cor(df$x[df$clase == "Aprobado"], df$y[df$clase == "Aprobado"]), error = function(e) NA)
     r_minus <- tryCatch(cor(df$x[df$clase == "Rechazado"], df$y[df$clase == "Rechazado"]), error = function(e) NA)
 
-    # R² global
+    #R^2 global
     r2 <- tryCatch(summary(lm(y ~ x, data = df))$r.squared, error = function(e) NA)
 
-    # Formato
+    #Formato
     txt <- paste0(
       "Corr: ", sprintf("%.3f", r_total), "\n",
       "-: ", sprintf("%.3f", r_minus), "\n",
@@ -817,7 +805,7 @@ Si repetimos la matriz de correlaciones para este dataset:
   subset_credit$Calificacion_crediticia <- log10(subset_credit$Calificacion_crediticia + 1)
 
   
-  # Graficar con color por clase
+  #graficamos con color por clase
   ggpairs(subset_credit,
           mapping = aes(color = Aprobado, alpha = 0.5),
           columns = 1:5,
@@ -850,14 +838,11 @@ La separación es aún mejor que en el caso general. Podemos ver el rendimiento 
   subset_credit$Prediccion_simple <- ifelse(subset_credit$Esfuerzo_financiero > 1.6, "Aprobado", "Rechazado")
   table(Real = subset_credit$Aprobado, Predicho = subset_credit$Prediccion_simple)
   
-  library(ggplot2)
-  library(dplyr)
-
-  # Crear tabla de confusión en formato largo
+  #creamos  tabla de confusión en formato largo
   conf_mat <- table(Real = subset_credit$Aprobado, Predicho = subset_credit$Prediccion_simple)
   conf_df <- as.data.frame(conf_mat)
 
-  # Añadir etiquetas
+  #añadimos etiquetas
   conf_df <- conf_df %>%
     mutate(Tipo = case_when(
       Real == "Aprobado" & Predicho == "Aprobado" ~ "Verdadero Positivo",
@@ -877,15 +862,14 @@ La separación es aún mejor que en el caso general. Podemos ver el rendimiento 
     theme_minimal()
 ```
 
-La matriz de confusión los indica que un predictor que utilizase este nuevo campo como clasificador
+La matriz de confusión nos indica que un predictor que utilizase este nuevo campo como clasificador
 en los casos con un índice crediticio alto, se obtendría una tasa de acierto del 75%.
 
 ```{r}
   credit_alto$Prediccion_simple <- ifelse(as.character(credit_alto$Impago_previo) == "t", "Aprobado", "Rechazado")
   table(Real = credit_alto$Aprobado, Predicho = credit_alto$Prediccion_simple)
   
-  library(ggplot2)
-  library(dplyr)
+
 
   # Crear tabla de confusión en formato largo
   conf_mat <- table(Real = credit_alto$Aprobado, Predicho = credit_alto$Prediccion_simple)
@@ -935,6 +919,7 @@ colSums(is.na(credit))
 ```
 
 En una gráfica podemos verlos mejor: 
+
 ```{r nulos2}
 #vemos losnulos con gráfico de barras
 library(ggplot2)
@@ -964,7 +949,7 @@ na_por_fila <- rowSums(is.na(credit.Datos.Train ))
 
 #observaciones con al menos un NA
 con_na <- na_por_fila[na_por_fila > 0]
-length(con_na)  # ¿Cuántas observaciones tienen al menos un NA?
+length(con_na) 
 
 table(con_na)
 
@@ -1007,30 +992,28 @@ Los valores nulos deben tratarse adecuadamente antes de entrenar modelos de apre
 
 - Modelado de imputación: usar modelos predictivos (por ejemplo mice, missForest) para estimar los valores faltantes, aunque es más costoso computacionalmente.
 
-En nuestro caso, es probable que la mejor opción sea simplemente eliminar las filas con datos faltantes, pues como hemos visto en
+En nuestro caso, hemos decidido simplemente eliminar las filas con datos faltantes, pues como hemos visto en
 la gráfica anterior, hay muy pocos valores nulos en comparación con el número total de muestras que disponemos.
 
-### Tratamiento de outliers
 
-Utiliando facetas y los diagramas boxplot podemos saber de la existencia de outliers para todas las variables numéricas:
+## Tratamiento de outliers
+
+Utilizando facetas y los diagramas boxplot podemos saber de la existencia de outliers para todas las variables numéricas:
 
 ```{r boxplot-outliers, message=FALSE, warning=FALSE}
-library(ggplot2)
-library(tidyr)
-library(dplyr)
+
 
 #Selecciamos la variables numéricas
 datos_numericos <- credit.Datos.Train %>% 
   select(where(is.numeric)) %>%
   mutate(fila = row_number()) 
 
-# Convertir a formato largo (long format)
 datos_long <- pivot_longer(datos_numericos, 
                            cols = -fila,
                            names_to = "Variable", 
                            values_to = "Valor")
 
-# Boxplots con facet para cada variable
+#Boxplots con facet para cada variable
 ggplot(datos_long, aes(x = "", y = Valor)) +
   geom_boxplot(outlier.color = "red", fill = "lightblue") +
   facet_wrap(~ Variable, scales = "free", ncol = 3) +
@@ -1044,7 +1027,7 @@ Vemos que la mayoría de atributos sí que presentan outliers. Sin embargo, no h
 entre descartarlos y mantenerlos, pues en la transformación de datos aplicamos la transformación de Yeo-Johnson que 
 prácticamente acaba con todos los outliers al normalizar estas variables.
 
-### Creación del atributo `EsfuerzoFinanciero`
+## Creación del atributo `EsfuerzoFinanciero`
 Como ya hemos comentado, creemos que el atributo *EsfuerzoFinanciero* puede ser útil pues da buenos
 resultados como predictor. Es por eso que finalmente decidimos añadirlo como variable para entrenar los
 modelos:
@@ -1057,7 +1040,7 @@ if (!"Esfuerzo_financiero" %in% names(credit.Datos.Train)[campos_numericos]) {
 }
 ```
 
-### Transformación de los datos 
+## Transformación de los datos 
 A la hora de transformar los datos hay varias opciones posibles, las cuales hemos 
 comparado para ver los resultados que obteníamos con cada una de ellas:
 
@@ -1105,7 +1088,7 @@ rm(dx, transformed, transformedTest, dxTest, var, vars_to_transform, preProcValu
 PCA es una técnica de análisis de datos utilizada para representar un conjunto de datos multidimensionales
 mediante un conjunto más reducido de variables generadas como combinaciones lineales de sus componentes. 
 Esto se consigue buscando la proyección según la cual los datos presentan una mayor varianza. 
-En nuestro caso solo 6 de los campos son numéricos. 
+En nuestro caso solo 5 de los campos son numéricos. 
 Los campos que antes representábamos en escala logarítmica se pasan también en esta escala.
 No utilizamos el código postal ya que no es un dato continuo.
 
@@ -1119,7 +1102,7 @@ No utilizamos el código postal ya que no es un dato continuo.
 ```
 
 Mediante un gráfico de dispersión vemos las distribuciones
-de las dos primerascomponentes calculadas diferenciando según `Aprobado`.
+de las dos primeras componentes calculadas diferenciando según `Aprobado`.
 
 ```{r}
 pca_res <- prcomp(pca, scale = TRUE)
@@ -1130,9 +1113,9 @@ ggplot(pca_df, aes(PC1, PC2)) +
      modelr::geom_ref_line(h = 0) +
      modelr::geom_ref_line(v = 0) +
      geom_point(aes(color = Aprobado), size = 2, position='jitter',alpha = 0.4) +
-     xlab("First Principal Component") + 
-     ylab("Second Principal Component") + 
-     ggtitle("First Two Principal Components of Credit Data")
+     xlab("Primera Componente Principal") + 
+     ylab("Segunda Componente Principal") + 
+     ggtitle("Dos primeras componentes principales")
 ```
 
 Como vemos, la componente PC1 parece un buen predictor. Podemos visualizar su dispersión en el siguiente gráfico y
@@ -1177,7 +1160,7 @@ De la componente PC1 podemos saber también cómo se calcula a partir de los cam
     loadings[,1]
 ```
 
-PC1 da más o menos la misma importancia a todas las variables, relacionándose de forma positiva con todas.
+PC1 da más o menos la misma importancia a todas las variables, relacionándose de forma negativa con todas.
 La que tiene un mayor coeficiente es la `Calificacion_crediticia`. Cabe mencionar que estos coeficientes
 se calculan sobre una distribución reescalada para seguir una distribución normal, por lo que es correcto
 el análisis de correlacionar una mayor importancia en la clasificación con respecto al escalar dado por
@@ -1213,9 +1196,9 @@ credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Sali
 Los modelos que utilicemos tienen que poder usar tanto de los atributos numéricos como los categóricos,
 aunque no necesariamente los dos tipos a la vez. Incluimos:
 
-- rpart: sencillo y lineal
+- rpart: sencillo y basado en árboles de decisión
 
-- rf: complejo y basado en árboles de decisión
+- ranger: complejo y basado en bosques aleatorios
 
 - gbm: complejo y basado en descenso de gradiente
 
@@ -1235,18 +1218,18 @@ sencilla como lo son los árboles de decisión. Este tipo de modelo predictivo r
 tener una estructura de árbol: para clasificar un individuo se parte desde una raíz. En cada nodo,
 según el valor de una determinado atributo, se divide el conjunto de datos en dos o más ramas.
 Este proceso se repite hasta alcanzar una hoja, a la cual se asigna una única categoría.
-Las carácteristicas por las que nos interesamos en este método son:
+Las características por las que nos interesamos en este método son:
 
 - Las divisiones pueden realizarse en base a atributos
 tanto numéricos como categóricos, por lo que es capaz de aprovechar los patrones en variables
-cátegoricas sin necesidad de conversión.
+categóricas sin necesidad de conversión.
 
 - La fácil interpretabilidad de los resultados obtenidos, que puede guiar nuestra elección de otros
 modelos a considerar.
 
-Como punto negativo, esta técnica no es muy potente y tiene propensa al sobreajuste.
+Como punto negativo, esta técnica no es muy potente y es propensa al sobreajuste.
 Sin embargo, el objetivo de este ataque, más que obtener una solución final, es informar nuestra
-posterior elección de modelos, además de establecer unos resultados de clasificación base contra
+posterior elección de modelos, además de establecer unos resultados de clasificación base con
 los que contrastar los que obtendremos con otros modelos.
 
 ```{r}
@@ -1265,9 +1248,10 @@ tree_model <- train(
 tree_model
 ```
 
-Hemos hecho uso de `rpart`, con un parámetro `tuneLength` de 10. Hemos probado distintos valores 
+Hemos hecho uso de `rpart` con un parámetro `tuneLength` de 10. Hemos probado distintos valores 
 de este hiperparámetro, pero los resultados que se obtienen son casi siempre los mismos. 
-Con este método, el único hiperpárametro a modificar es el de complejidad `cp`, que toma 
+Con este método, el único hiperpárametro a modificar es `cp` (controla la complejidad del árbol, 
+evitando sobreajuste al requerir una mejora mínima en el error para permitir una nueva división), que toma 
 valores entre 0 y 1. Pues bien, para todo valor entre 0.018 y 0.714, el árbol que se obtiene 
 es exactamente el mismo.
 
@@ -1327,17 +1311,9 @@ fitControl <- trainControl(
   number = n_folds,
   repeats = n_reps,
   verboseIter = FALSE,
-  # index = foldIndexes,
-  # seeds = seeds,
-  #summaryFunction = twoClassSummary,
-  #classProbs = TRUE
+
 )
 
-
-# cl <- makeCluster(detectCores()-1)
-# registerDoParallel(cl)
-
-# set.seed(1234)
 
 credit.ranger <- train(
   credit_no_na[credit.Vars.Entrada.Usadas],  
@@ -1350,19 +1326,16 @@ credit.ranger <- train(
   importance = 'impurity'            
 )
 
-# stopImplicitCluster()
-# stopCluster(cl)
-# registerDoSEQ()
 
 credit.ranger
 
 varImp(credit.ranger)
 ```
 
-Obtenemos una *accuracy* de 88.38, utilizando mtry=14 y splitrule = extratrees.
+Obtenemos una *accuracy* de 88.57, utilizando mtry=3 y splitrule = extratrees.
 
 También nos damos cuenta que, como ocurría en *rpart*, la variable de mayor importancia es Impago previo.
-También le da bastante importancia a las variable añadidas por nosotros (Esfuerzo_financiero y DeudaRelativa), lo cual nos hace pensar
+También le da bastante importancia a la variable añadida por nosotros (Esfuerzo_financiero), lo cual nos hace pensar
 que ha sido una buena inclusión.
 
 ### Gradient Boosting Machine
@@ -1378,7 +1351,7 @@ computacional e interpretabilidad.
 
 Gbm produce nuevos modelos de forma secuencial, buscando minimizar en cada iteración una
 función de pérdida arbitraria que mide la diferencia entre las predicciones y los valores
-reales. El nuevo modelo se austa a los "pseudo-residuales", que son los gradientes
+reales. El nuevo modelo se ajusta a los "pseudo-residuales", que son los gradientes
 negativos de la función de pérdida con respecto a las predicciones actuales. 
 Este proceder es lo que le da el nombre de "gradient", pues lo que se hace en esencia es 
 minimizar en la dirección que más decrece el gradiente de la función de pérdidas. 
@@ -1396,7 +1369,7 @@ Vamos a hacer una exploración para el número de árboles (n.trees), para la pr
 la tasa de aprendizaje (shrinkage) y mínimo de observaciones por nodo (n.minobsinnode).
 También fijamos una semilla para poder recrear los resultados.
 
-Para la creación del grid seguimos el método de ajustar al grano. En primer lugar empezamos con valores de n.trees 
+Para la creación del grid seguimos el método de ajustar el grano. En primer lugar empezamos con valores de n.trees 
 en un mayor rango (100, 200, 300). Nos dimos cuenta que funcionaba mejor con valores más bajos, por lo que ajustamos a (25,50,75).
 Como el que mejor estaba funcionando era 50, ajustamos a (45, 50, 55) que fueron los valores que finalmente utilizamos.
 De forma similar para los otros tres parámetros.
@@ -1419,7 +1392,7 @@ n_reps <- 3
 
 Posteriormente, definimos el control de entrenamiento para determinar cómo
 realizar la validación cruzada y qué metricas usar para evaluar la combinación de los hiperparámetros.
-Vamos a utilizar validación cruzada repetiva con 10 folds y 3 repeticiones. 
+Vamos a utilizar validación cruzada repetitiva con 10 folds y 3 repeticiones. 
 
 ```{r}
 fitControl <- trainControl(
@@ -1446,7 +1419,7 @@ gbm_modelo <- train(
 gbm_modelo
 ```
 
-El resultado óptimo de accuracy (0.8823840) se ha obtenido con los siguiente parámetros:
+El resultado óptimo de accuracy (0.8836819) se ha obtenido con los siguiente parámetros:
 
 - n.trees = 45
   
@@ -1481,6 +1454,7 @@ Finalmente, queremos entrenar también un perceptrón multicapa (MLP) para prede
 Para esto hacemos uso de la librería `nnet`.
 
 Un MLP es una red neuronal compuesta por varias capas de neuronas conectadas entre sí:
+
 - Una capa de entrada, por la que se introducen los datos al modelo. Cada neurona de entrada representa una
 variable o característica del conjunto de datos.
 
@@ -1507,10 +1481,10 @@ credit_copy_test <- credit_copy[-credit.trainIdx, ]
 ```
 
 A continuación, elegimos los campos que usaremos como entrada para el modelo. 
-Experimentando con los datos de entrada, nos sorprendió ver que se producía una ligera 
-disminución en `Accuracy` cuando se elimina de los datos de entrada del modelo el campo 
-`Codigo_postal`. Esperábamos que este no aportara ningún valor como campo numérico. Sin 
-embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
+Probamos un primer preprocesado eliminando el `Codigo_postal` de las variables a introducir al MLP.
+Sin embargo nos sorprendió que se producía una ligera 
+disminución en `Accuracy`. Esperábamos que este no aportara ningún valor como campo numérico. 
+No obstante, dado que parece producir una pequeña mejora, lo hemos conservado, siendo este el segundo preprocesado.
 
 ```{r}
 mlp_inputs <- campos_numericos_nuevo
@@ -1520,16 +1494,16 @@ mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
 
 El ajuste de hiperparámetros lo llevaremos a cabo usando `tuneGrid`,
 y modificaremos los valores de `size` y `decay`:
+
 - `size` hace referencia al número de neuronas en la capa oculta
 de la red. El conjunto de valores que hemos elegido es `[3, 7, 11, 15]`
+
 - Weight decay es una técnica para evitar el sobrentrenamiento. Consiste en
 minimizar los pesos de las neuronas junto con el error de clasificación cometido.
 `decay` controla la intensidad de la regularización. Los valores elegidos
 han sido `[0, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 1]`
 
 ```{r}
-if (!requireNamespace("nnet", quietly = TRUE)) install.packages("nnet")
-library(nnet)
 
 credit_no_na <- credit_copy_train
 #tomamos logaritmo de variables en campos_log
@@ -1564,18 +1538,18 @@ print(mlp_cv)
 plot(mlp_cv)
 ```
 
-Obsevando los resultados obtenidos podemos comprobar que el efecto
+Observando los resultados obtenidos podemos comprobar que el efecto
 de `decay` es notable y muy positivo. Al ser un conjunto de datos pequeño,
 existe una tendencia fuerte a sobreajustar. Forzar los pesos a tomar
 valores pequeños limita este efecto.
 
 También vemos que los resultados obtenidos son similares independientemente
 del número de neuronas en la capa oculta. De este hecho deducimos que este
-dataset no contiene patrones que se puedan explotar para mejorar la
-clasificacion, más allá de alguna tenue mejora sobre los patrones superficiales
+dataset no contiene patrones que se puedan explotar fácilmente para mejorar la
+clasificación, más allá de alguna tenue mejora sobre los patrones superficiales
 ya encontrados por nosotros.
 
-Los mejores resultados se obtienen con un valor de `size` 11 o 15, con un `decay`
+Los mejores resultados se obtienen con un valor de `size` 15, con un `decay`
 de 0.3. En realidad este máximo parece causa de ligeras desviaciones aleatorias
 más que de una adecuación mayor del `size` elegido, lo que se puede deducir del
 hecho de que las cuatro gráficas se entrecruzan constantemente.
@@ -1598,12 +1572,12 @@ returnResamp = "all"
 )
 
 credit.comparison.rpart<- suppressWarnings(train(credit.Datos.Train[credit.Vars.Entrada.Usadas],
-                                 credit.Datos.Train[[credit.Var.Salida.Usada]], 
-                                 method='rpart',
-                                 metric = "Accuracy",
-                                 tuneLength = 10,
-                                 trControl = credit.trainCtrl.3cv10.resampAll
-                                 ))
+  credit.Datos.Train[[credit.Var.Salida.Usada]], 
+  method='rpart',
+  metric = "Accuracy",
+  tuneLength = 10,
+  trControl = credit.trainCtrl.3cv10.resampAll
+))
 
 
 credit.comparison.gbm <- suppressWarnings(train(
@@ -1612,7 +1586,6 @@ credit.comparison.gbm <- suppressWarnings(train(
   method = 'gbm',
   tuneGrid = gbm_grid,
   verbose = FALSE,
-  #metric = "ROC",
   trControl = credit.trainCtrl.3cv10.resampAll,
   bag.fraction = 0.75
 ))
@@ -1643,11 +1616,10 @@ credit.comparison.mlp <- suppressWarnings(train(
 
 ```
 ```{r}
-models <- list(rpart = credit.comparison.rpart, gbm = gbm_modelo , ranger = credit.comparison.ranger)#, mlp = credit.comparison.mlp)
+models <- list(rpart = credit.comparison.rpart, gbm = gbm_modelo , ranger = credit.comparison.ranger, mlp = credit.comparison.mlp)
 credit.rsamp.comparison <- resamples(models)
 
 summary(credit.rsamp.comparison)
-x11()
 dotplot(credit.rsamp.comparison, metric = "Accuracy",
     scales =list(x = list(relation = "free")))
 ```
@@ -1659,7 +1631,7 @@ Tras analizar los resultados obtenidos por cada modelo en validación cruzada, s
 ligeramente superiores, tanto en el primer cuartil como en la media.
 En comparación, el modelo rpart, aunque interpretable, ha mostrado un rendimiento inferior, 
 como es habitual en árboles individuales. El modelo nnet (red neuronal) ha obtenido resultados competitivos, 
-pero no han superadoa los otros dos.
+pero no han superado a los otros dos.
 
 Por tanto, se selecciona el modelo gbm como el más adecuado para tratar los casos de test.
 Veamos los resultados que obtiene:
@@ -1670,6 +1642,9 @@ preds<-predict( gbm_modelo,
 
 confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]])
 ```
+
+Obtenemos una `Accuracy` del 87.5%, un resultado más que aceptable, aunque nos damos cuenta que es inferior 
+a lo que habíamos obtenido en la validación con el subconjunto de Train.
 
 # Conclusiones
 
@@ -1693,9 +1668,3 @@ sesgados por conocer qué representan los atributos, creemos que el tratamiento 
 de los datos ha sido riguroso. Con respecto a la utilización de los modelos, gracias
 a la exploración de meta-parámetros con tuneGrid hemos podido entender la influencia
 de estos, teniendo que comprobar primero la teoría para entenderlos.
-
-# Anexos
-
-```{r session-info}
-sessionInfo()
-```
