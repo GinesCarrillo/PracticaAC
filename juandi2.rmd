@@ -565,7 +565,7 @@ plot_categorical <- function(var_name) {
 
 categorical_plots <- map(categorical_vars, plot_categorical)
 
-grid.arrange(grobs = categorical_plots, ncol = 2)
+grid.arrange(grobs = categorical_plots, ncol = 3)
 ```
 
 Nos gustaría también ver cómo los valores que toman estos campos 
@@ -573,7 +573,7 @@ afectan a la variable a predecir. Para ello podemos hacer uso de la función
 `spineplot`, que nos muestra para cada valor de una variable tanto su 
 poblacion (ancho) como su tasa de aprobados (alto de la barra azul).
 ```{r}
-par(mfrow = c(5, 2))  #plots en cuadrícula 2x5
+par(mfrow = c(3, 3))  #plots en cuadrícula 3x3
 
 for (var in categorical_vars) {
   spineplot(x = credit[[var]], 
@@ -630,7 +630,7 @@ ggplot(df_plot, aes(x = Impago_previo, y = Aprobado, fill = Count)) +
   labs(title = "Tabla de frecuencias de impago previo frente a aprobado",
        x = "Impago previo",
        y = "Aprobado") +
-  theme_minimal(base_size = 12)
+  theme_minimal(base_size = 20)
 ```
 
 ## Análisis multivariable
@@ -1252,7 +1252,6 @@ rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, m
 Evaluando los resultados obtenidos, nos damos cuenta que el árbol encontrado con mejor *accuracy* no es otro 
 que el decisor que ya habíamos considerado en la fase de análisis exploratorio: si existe impago previo se rechaza 
 la solicitud, si no, se aprueba.
-
 ### Random Forest (ranger)
 
 El siguiente modelo que vamos a utilizar es Random Forest.
@@ -1367,15 +1366,16 @@ En primer lugar, vamos a definir un grid de hiperparámetros para encontrar las 
 Vamos a hacer una exploración para el número de árboles, para la profundidad máxima de los mismos,
 la tasa de aprendizaje y mínimo de observaciones por nodo.
 También fijamos una semilla para poder recrear los resultados.
+
 ```{r}
 library(caret)
-set.seed(1234)
+set.seed(610)
 
 gbm_grid <- expand.grid(
-  n.trees = c(45, 50, 55),
-  interaction.depth = c(3,6,7),
-  shrinkage = c(0.09, 0.1, 0.12),
-  n.minobsinnode = c(10, 15,20)
+  n.trees = c(50, 75, 100),
+  interaction.depth = c(3, 5, 7),
+  shrinkage = c(0.01, 0.02, 0.03),
+  n.minobsinnode = c(5, 25,30)
 )
 
 n_folds <- 10
@@ -1403,7 +1403,7 @@ gbm_modelo <- train(
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
   method = "gbm",
   trControl = fitControl,
-  tuneGrid=gbm_grid,
+  tuneGrid = gbm_grid,
   verbose = FALSE,
   bag.fraction = 0.75
 )
@@ -1413,16 +1413,16 @@ gbm_modelo
 
 El resultado óptimo de accuracy (0.8823840) se ha obtenido con los siguiente parámetros:
 
-- n.trees = 45
+- n.trees = 300
   
-- interaction.depth = 6
+- interaction.depth = 7
   
-- shrinkage = 0.12
+- shrinkage = 0.01
   
-- n.minobsinnode = 10
+- n.minobsinnode = 20
   
-Al dar como resultado una profundidad de 6, sabemos que el árbol final de decisión utiliza 
-seis comprobaciones para la clasificación. Podemos ver la evolución de la acurracy en función de la tasa de aprendizaje
+Al dar como resultado una profundidad de 7, sabemos que el árbol final de decisión utiliza 
+siete comprobaciones para la clasificación. Podemos ver la evolución de la acurracy en función de la tasa de aprendizaje
 y el resto de variables con la siguientes gráficas:
 
 ```{r}
@@ -1450,6 +1450,7 @@ de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nu
 
 ```{r}
 credit_copy <- credit
+credit_copy$Esfuerzo_financiero <- credit_copy$Deuda + credit_copy$Anos_cotizados  + abs(credit_copy$Ingresos-1)*0.375
 credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
 campos_numericos_nuevo <- c(campos_numericos, 18)
 
@@ -1547,22 +1548,22 @@ credit.comparison.ranger <- suppressWarnings(train(
   trControl = credit.trainCtrl.3cv10.resampAll
 ))
 
-# credit.comparison.mlp <- suppressWarnings(train(
-#   credit_scaled[mlp_inputs],
-#   credit_scaled[["Aprobado"]],
-#   method = "nnet",
-#   trControl = credit.trainCtrl.3cv10.resampAll,
-#   tuneGrid = expand.grid(
-#     size = c(3, 5, 7, 9, 11),
-#     decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
-#   ),
-#   maxit = 200,
-#   trace = FALSE
-# ))
+credit.comparison.mlp <- suppressWarnings(train(
+  credit_scaled[mlp_inputs],
+  credit_scaled[["Aprobado"]],
+  method = "nnet",
+  trControl = credit.trainCtrl.3cv10.resampAll,
+  tuneGrid = expand.grid(
+    size = c(3, 5, 7, 9, 11),
+    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+  ),
+  maxit = 200,
+  trace = FALSE
+))
 
 ```
 ```{r}
-models <- list(rpart = credit.comparison.rpart, gbm = gbm_modelo, ranger = credit.ranger)#, mlp = credit.comparison.mlp)
+models <- list(rpart = credit.comparison.rpart, gbm = credit.comparison.gbm, ranger = credit.comparison.ranger, mlp = credit.comparison.mlp)
 credit.rsamp.comparison <- resamples(models)
 
 summary(credit.rsamp.comparison)
