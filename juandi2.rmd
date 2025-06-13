@@ -1221,6 +1221,13 @@ aunque no necesariamente los dos tipos a la vez. Incluimos:
 
 - nnet: complejo y dentro del paradigma MLP
 
+En dos de los modelos mencionados (GBM y MLP) hemos utilizado un grid de hiperparámetros,
+a través del argumento `tuneGrid` para encontrar las mejores combinaciones de
+valores para estos. Con el comando `expand.grid()` se crea el
+data frame con las todas las combinaciones a probar. Una vez se han entrenado
+los modelos, podemos repetir el proceso con una estimacón mas afinada en base a los resultados obtenidos.
+Finalmente nos quedamos con el modelo que obtiene mejores resultados.
+
 ### Árboles de decisión (rpart)
 
 Como primera aproximación a la tarea de clasificación, nos pareció interesante usar una técnica
