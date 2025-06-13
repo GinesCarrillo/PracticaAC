@@ -85,8 +85,11 @@ if (!requireNamespace("rpart", quietly = TRUE)) {
 if (!requireNamespace("rpart.plot", quietly = TRUE)) {
   install.packages("rpart.plot")
 }
+if (!requireNamespace("gbm", quietly = TRUE)) {
+  install.packages("gbm")
+}
 
-
+library(gbm)
 library(caret)
 library(tidyverse)
 library(ggplot2)
@@ -908,12 +911,12 @@ En cambio, si utilizamos aquí el predictor `Impago_previo`, vemos como el resul
 
 
 # Preprocesado de datos
+Realizamos ya la división entre Train y Test:
 ```{r preprocessing}
-# Preprocesado 1 y preprocesado 2 para comparar más adelante
-    # Cargar índices de train
+    #cargamos índices de train
     credit.trainIdx <- readRDS("credit.trainIdx")
 
-    # Separación de conjuntos
+    #separamos los dos conjuntos
     credit.Datos.Train <- credit[credit.trainIdx, ]
     credit.Datos.Test <- credit[-credit.trainIdx, ]
 ```
@@ -922,19 +925,19 @@ En cambio, si utilizamos aquí el predictor `Impago_previo`, vemos como el resul
 En primer lugar, veamos si hay valores nulos y cuántos hay en cada columna:
 
 ```{r nulos1}
-# Una sola línea para contar nulos por columna
+#Contamos los nulos con una sola línea
 colSums(is.na(credit))
 
 ```
 
 En una gráfica podemos verlos mejor: 
 ```{r nulos2}
-# Visualización de los nulos con gráfico de barras
+#vemos losnulos con gráfico de barras
 library(ggplot2)
 
 nulos <- colSums(is.na(credit))
 nulos_df <- data.frame(Variable = names(nulos), Nulos = nulos)
-nulos_df <- nulos_df[nulos_df$Nulos > 0, ]  # Solo mostrar columnas con nulos
+nulos_df <- nulos_df[nulos_df$Nulos > 0, ]  # Solo mostramos las columnas que tengan nulos
 
 ggplot(nulos_df, aes(x = reorder(Variable, -Nulos), y = Nulos)) +
   geom_bar(stat = "identity", fill = "tomato") +
@@ -952,19 +955,16 @@ Para ello vamos a ver la frecuencia del número de atributos faltantes. Ya traba
 no debemos modificar los datos de Test a partir de ahora.
 
 ```{r faltantes}
-# Número de valores NA por fila
+#numero de valores NA por fila
 na_por_fila <- rowSums(is.na(credit.Datos.Train ))
 
-# Observaciones con al menos un NA
+#observaciones con al menos un NA
 con_na <- na_por_fila[na_por_fila > 0]
 length(con_na)  # ¿Cuántas observaciones tienen al menos un NA?
 
-# Tabla resumen
 table(con_na)
 
-# Histograma: cuántos atributos faltan por observación (entre las que tienen algún NA)
 library(ggplot2)
-
 ggplot(data.frame(Faltantes = con_na), aes(x = Faltantes)) +
   geom_bar(fill = "steelblue") +
   labs(title = "Nº de atributos faltantes por observación",
@@ -984,10 +984,10 @@ valores faltantes,
 se conservarán y se decidirá si se inputan o no posteriormente.
 
 ```{r faltantes2}
-# Eliminar observaciones con más de 4 atributos faltantes
+#eliminamos las observaciones con más de 4 atributos faltantes
 credit.Datos.Train <- credit.Datos.Train[na_por_fila <= 4, ]
 
-# Verificamos tamaño tras limpieza
+#verificamos tamaño tras limpieza
 nrow(credit.Datos.Train)
 ```
 
@@ -1035,48 +1035,35 @@ para que una variable siga una distribución normal. La principal limitación es
 - Yeo-Johnson: Es una extensión de la transformación Box-Cox que sí permite trabajar 
   con valores negativos y con valores iguales a 0.
 
-Tras probar las 4 alternativas, nos dimos cuenta que no existía una gran diferencia entre ellas, obteniendo la opción
-sin transformaciones unos resultados prácticamente idénticos al resto para todos los modelos. Es por ello que decidimos 
-proseguir sin introducir transformaciones generales en los datos.
+Tras probar las 4 alternativas, nos dimos cuenta que con Yeo-Johnson se obtenían ligeras mejoras sobre todo
+en el modelo gbm.
+El resto obtenían resultados muy similares con todas las transformaciones, por lo que decidimos quedarnos trabajar
+con la transformación de Yeo-Johnson para no tener que distinguir casos para cada uno de los modelos:
 
 ```{r}
-# vars_to_transform <- names(credit)[campos_log]
-
-# # Iterar sobre cada variable numérica y aplicar logaritmo (log(x + 1))
-# for (var in vars_to_transform) {
-#   credit.Datos.Train[[var]] <- log(credit.Datos.Train[[var]] + 1)
-#   credit.Datos.Test[[var]] <- log(credit.Datos.Test[[var]] + 1)
-# }
-
-# # Limpiar variables temporales
-# rm(var, vars_to_transform)
-```
-
-```{r}
-# Definir las variables para aplicar la transformación
 vars_to_transform <- names(credit.Datos.Train)[campos_numericos]
 
-# Iterar sobre cada variable
 for (var in vars_to_transform) {
-  # Seleccionar la columna actual
   dx <- credit.Datos.Train[, var, drop = FALSE]
+  dx
   dxTest <- credit.Datos.Test[, var, drop = FALSE]
 
-  # Aplicar la transformación Yeo-Johnson
+  #aplicamos la transformación Yeo-Johnson
   preProcValues <- preProcess(dx, method = "YeoJohnson")
 
-  # Transformar los datos
-  dx_transformed <- predict(preProcValues, dx)
-  dx_transformedTest <- predict(preProcValues, dxTest)
+  transformed <- predict(preProcValues, dx)
+  transformedTest <- predict(preProcValues, dxTest)
 
-  # Sustituir la columna original por la transformada
-  credit.Datos.Train[, var] <- dx_transformed[[var]]
-  credit.Datos.Test[, var] <- dx_transformedTest[[var]]
+  #sustituimos la columna original por la transformada
+  credit.Datos.Train[, var] <- transformed[[var]]
+  credit.Datos.Test[, var] <- transformedTest[[var]]
 }
 
-# Limpiar variables temporales
-rm(dx, dx_transformed, dx_transformedTest, dxTest, var, vars_to_transform, preProcValues)
+rm(dx, transformed, transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
+
+### Tratamiento de outliers
+
 
 ## Análisis de Componentes Principales (PCA)
 
@@ -1184,7 +1171,6 @@ Vamos a utilizar la versión del dataset que hemos definido en el apartado de pr
 
 ```{r}
 credit_no_na <- na.omit(credit.Datos.Train)
-credit_no_na_esfuerzo <- na.omit(credit.Datos.Train)
 credit.Var.Salida.Usada <- c("Aprobado")
 credit.Vars.Entrada.Usadas <- setdiff(names(credit.Datos.Train), credit.Var.Salida.Usada)
 ```
@@ -1218,7 +1204,7 @@ modelos a considerar.
 
 Como punto negativo, esta técnica no es muy potente y tiene propensa al sobreajuste.
 Sin embargo, el objetivo de este ataque, más que obtener una solución final, es informar nuestra
-posterior elección de modeloses, además de establecer unos resultados de clasificación base contra
+posterior elección de modelos, además de establecer unos resultados de clasificación base contra
 los que contrastar los que obtendremos con otros modelos.
 
 ```{r}
@@ -1252,6 +1238,7 @@ rpart.plot(tree_model$finalModel, type = 2, extra = 104, fallen.leaves = TRUE, m
 Evaluando los resultados obtenidos, nos damos cuenta que el árbol encontrado con mejor *accuracy* no es otro 
 que el decisor que ya habíamos considerado en la fase de análisis exploratorio: si existe impago previo se rechaza 
 la solicitud, si no, se aprueba.
+
 ### Random Forest (ranger)
 
 El siguiente modelo que vamos a utilizar es Random Forest.
@@ -1270,7 +1257,7 @@ Los dos hiperparámetros más influyentes para optimizar el rendimiento del mode
 - **mtry**: Controla el número de variables predictoras que se consideran aleatoriamente 
 en cada división de un nodo al construir un árbol individual.
 
-- **splitrule** Define el criterio utilizado para decidir cómo se realiza la mejor división en cada nodo de un árbol. 
+- **splitrule**: Define el criterio utilizado para decidir cómo se realiza la mejor división en cada nodo de un árbol. 
   Las opciones disponibles para esta parámetro son:
 
     - gini (por defecto): Utiliza el índice de Gini para medir la impureza. 
@@ -1311,8 +1298,8 @@ fitControl <- trainControl(
 # set.seed(1234)
 
 credit.ranger <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],  
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],   
+  credit_no_na[credit.Vars.Entrada.Usadas],  
+  credit_no_na[[credit.Var.Salida.Usada]],   
   method = "ranger",                  
   verbose = FALSE,
   tuneLength = 15,                    
@@ -1363,19 +1350,25 @@ Escogemos gbm ya que:
 - Perfecto para clasificación binaria con la función de pérdida de desviación binaria (por defecto). 
 
 En primer lugar, vamos a definir un grid de hiperparámetros para encontrar las condiciones ideales con las que utilizar gbm.
-Vamos a hacer una exploración para el número de árboles, para la profundidad máxima de los mismos,
-la tasa de aprendizaje y mínimo de observaciones por nodo.
+Vamos a hacer una exploración para el número de árboles (n.trees), para la profundidad máxima de los mismos (interaction.depth),
+la tasa de aprendizaje (shrinkage) y mínimo de observaciones por nodo (n.minobsinnode).
 También fijamos una semilla para poder recrear los resultados.
+
+Para la creación del grid seguimos el método de ajustar al grano. En primer lugar empezamos con valores de n.trees 
+en un mayor rango (100, 200, 300). Nos dimos cuenta que funcionaba mejor con valores más bajos, por lo que ajustamos a (25,50,75).
+Como el que mejor estaba funcionando era 50, ajustamos a (45, 50, 55) que fueron los valores que finalmente utilizamos.
+De forma similar para los otros tres parámetros.
+
 
 ```{r}
 library(caret)
-set.seed(610)
+set.seed(1234)
 
 gbm_grid <- expand.grid(
-  n.trees = c(50, 75, 100),
-  interaction.depth = c(3, 5, 7),
-  shrinkage = c(0.01, 0.02, 0.03),
-  n.minobsinnode = c(5, 25,30)
+  n.trees = c(45, 50, 55),
+  interaction.depth = c(3,6,7),
+  shrinkage = c(0.09, 0.1, 0.12),
+  n.minobsinnode = c(10, 15,20)
 )
 
 n_folds <- 10
@@ -1399,8 +1392,8 @@ Finalmente, realizamos el entrenamiento del modelo, especificando la columna de 
 
 ```{r}
 gbm_modelo <- train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]], 
   method = "gbm",
   trControl = fitControl,
   tuneGrid = gbm_grid,
@@ -1413,16 +1406,16 @@ gbm_modelo
 
 El resultado óptimo de accuracy (0.8823840) se ha obtenido con los siguiente parámetros:
 
-- n.trees = 300
+- n.trees = 45
   
-- interaction.depth = 7
+- interaction.depth = 6
   
-- shrinkage = 0.01
+- shrinkage = 0.12
   
-- n.minobsinnode = 20
+- n.minobsinnode = 10
   
-Al dar como resultado una profundidad de 7, sabemos que el árbol final de decisión utiliza 
-siete comprobaciones para la clasificación. Podemos ver la evolución de la acurracy en función de la tasa de aprendizaje
+Al dar como resultado una profundidad de 6, sabemos que el árbol final de decisión utiliza 
+seis comprobaciones para la clasificación. Podemos ver la evolución de la acurracy en función de la tasa de aprendizaje
 y el resto de variables con la siguientes gráficas:
 
 ```{r}
@@ -1432,11 +1425,13 @@ plot(gbm_modelo, metric = "Accuracy", plotType = "scatter", ylim = c(0.85, 0.89)
 En lo relativo a la importancia de las variables, podemos observarla ejecutando el siguiente comando:
 
 ```{r}
-# varImp.gbm(gbm_modelo)
+
+varImp(gbm_modelo)
 ```
 
-Nuevamente, el impago previo es la variable más determinante, de ahí que se esté tomando una
-profundidad de 1. Los predictores se están haciendo con este campo.
+Nuevamente, el impago previo es la variable más determinante. Sorprendentemente, Nivel_educativo es
+el segundo con mayor importancia. También cabe destacar que Esfuerzo_financiero, la variable que hemos
+creado nosotros es una de las que tiene mayor relevancia.
 
 ### Multi Layer Perceptron
 
@@ -1506,10 +1501,15 @@ mlp_cv <- train(
 print(mlp_cv)
 plot(mlp_cv)
 ```
-
 # Comparación de modelos
+En esta sección llevamos a cabo la comparación de los cuatro modelos.
 
+Todos los modelos se han entrenado bajo una misma configuración de validación cruzada 
+(10 particiones repetidas 3 veces), utilizando como métrica de evaluación la exactitud (Accuracy). 
+El objetivo es identificar qué modelo se ajusta mejor a los datos y generaliza con mayor 
+eficacia.
 ```{r model-comparison}
+set.seed(1234)
 credit.trainCtrl.3cv10.resampAll <- trainControl(
 method = "repeatedcv"
 ,number = 10 ,repeats = 3, 
@@ -1527,8 +1527,8 @@ credit.comparison.rpart<- suppressWarnings(train(credit.Datos.Train[credit.Vars.
 
 
 credit.comparison.gbm <- suppressWarnings(train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]], 
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]], 
   method = 'gbm',
   tuneGrid = gbm_grid,
   verbose = FALSE,
@@ -1539,8 +1539,8 @@ credit.comparison.gbm <- suppressWarnings(train(
 
 
 credit.comparison.ranger <- suppressWarnings(train(
-  credit_no_na_esfuerzo[credit.Vars.Entrada.Usadas],
-  credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],  
+  credit_no_na[credit.Vars.Entrada.Usadas],
+  credit_no_na[[credit.Var.Salida.Usada]],  
   method = 'ranger',
   verbose = FALSE,
   metric = "Accuracy",
@@ -1548,22 +1548,22 @@ credit.comparison.ranger <- suppressWarnings(train(
   trControl = credit.trainCtrl.3cv10.resampAll
 ))
 
-credit.comparison.mlp <- suppressWarnings(train(
-  credit_scaled[mlp_inputs],
-  credit_scaled[["Aprobado"]],
-  method = "nnet",
-  trControl = credit.trainCtrl.3cv10.resampAll,
-  tuneGrid = expand.grid(
-    size = c(3, 5, 7, 9, 11),
-    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
-  ),
-  maxit = 200,
-  trace = FALSE
-))
+# credit.comparison.mlp <- suppressWarnings(train(
+#   credit_scaled[mlp_inputs],
+#   credit_scaled[["Aprobado"]],
+#   method = "nnet",
+#   trControl = credit.trainCtrl.3cv10.resampAll,
+#   tuneGrid = expand.grid(
+#     size = c(3, 5, 7, 9, 11),
+#     decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+#   ),
+#   maxit = 200,
+#   trace = FALSE
+# ))
 
 ```
 ```{r}
-models <- list(rpart = credit.comparison.rpart, gbm = credit.comparison.gbm, ranger = credit.comparison.ranger, mlp = credit.comparison.mlp)
+models <- list(rpart = credit.comparison.rpart, gbm = gbm_modelo , ranger = credit.comparison.ranger)#, mlp = credit.comparison.mlp)
 credit.rsamp.comparison <- resamples(models)
 
 summary(credit.rsamp.comparison)
@@ -1574,19 +1574,26 @@ dotplot(credit.rsamp.comparison, metric = "Accuracy",
 
 
 # Selección del modelo final
+Tras analizar los resultados obtenidos por cada modelo en validación cruzada, se observa que tanto el modelo 
+**gbm** (Gradient Boosting Machine) como el **ranger** obtienen resultados muy parecidos, siendo los de gbm
+ligeramente superiores, tanto en el primer cuartil como en la media.
+En comparación, el modelo rpart, aunque interpretable, ha mostrado un rendimiento inferior, 
+como es habitual en árboles individuales. El modelo nnet (red neuronal) ha obtenido resultados competitivos, 
+pero no han superadoa los otros dos.
 
-Justifica por qué se selecciona ese modelo final y qué rendimiento tiene sobre el conjunto de test.
+Por tanto, se selecciona el modelo gbm como el más adecuado para tratar los casos de test.
+Veamos los resultados que obtiene:
 
 ```{r final-eval}
-preds<-predict(gbm_modelo,
+preds<-predict( gbm_modelo,
             newdata=credit.Datos.Test[credit.Vars.Entrada.Usadas])
 
-table(Predicho = preds, Real = credit.Datos.Test[[credit.Var.Salida.Usada]])
-# caret::confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]], positive = "Positivo", mode = "prec_recall" )
-# confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]], positive = "Positivo", mode = "prec_recall" )
+confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]])
 ```
 
 # Conclusiones
+
+
 
 Resumen de hallazgos, aprendizajes y posibles mejoras.
 

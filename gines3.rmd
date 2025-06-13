@@ -1029,49 +1029,30 @@ para que una variable siga una distribución normal. La principal limitación es
 - Yeo-Johnson: Es una extensión de la transformación Box-Cox que sí permite trabajar 
   con valores negativos y con valores iguales a 0.
 
-Tras probar las 4 alternativas, nos dimos cuenta que no existía una gran diferencia entre ellas, obteniendo la opción
-sin transformaciones unos resultados prácticamente idénticos al resto para todos los modelos. Es por ello que decidimos 
-proseguir sin introducir transformaciones generales en los datos.
+Tras probar las 4 alternativas, nos dimos cuenta que con Yeo-Johnson se obtenían ligeras mejoras en el modelo gbm.
+El resto obtenían resultados muy similares con todas las transformaciones, por lo que decidimos quedarnos trabajar
+con la transformación de Yeo-Johnson para no tener que distinguir casos para cada uno de los modelos:
 
 ```{r}
-# vars_to_transform <- names(credit)[campos_log]
-
-# # Iterar sobre cada variable numérica y aplicar logaritmo (log(x + 1))
-# for (var in vars_to_transform) {
-#   credit.Datos.Train[[var]] <- log(credit.Datos.Train[[var]] + 1)
-#   credit.Datos.Test[[var]] <- log(credit.Datos.Test[[var]] + 1)
-# }
-
-# # Limpiar variables temporales
-# rm(var, vars_to_transform)
-```
-
-```{r}
-campos_numericos
-# Definir las variables para aplicar la transformación
 vars_to_transform <- names(credit.Datos.Train)[campos_numericos]
 
-# Iterar sobre cada variable
 for (var in vars_to_transform) {
-  # Seleccionar la columna actual
   dx <- credit.Datos.Train[, var, drop = FALSE]
   dx
   dxTest <- credit.Datos.Test[, var, drop = FALSE]
 
-  # Aplicar la transformación Yeo-Johnson
+  #aplicamos la transformación Yeo-Johnson
   preProcValues <- preProcess(dx, method = "YeoJohnson")
 
-  # Transformar los datos
-  dx_transformed <- predict(preProcValues, dx)
-  dx_transformedTest <- predict(preProcValues, dxTest)
+  transformed <- predict(preProcValues, dx)
+  transformedTest <- predict(preProcValues, dxTest)
 
-  # Sustituir la columna original por la transformada
-  credit.Datos.Train[, var] <- dx_transformed[[var]]
-  credit.Datos.Test[, var] <- dx_transformedTest[[var]]
+  #sustituimos la columna original por la transformada
+  credit.Datos.Train[, var] <- transformed[[var]]
+  credit.Datos.Test[, var] <- transformedTest[[var]]
 }
 
-# Limpiar variables temporales
-rm(dx, dx_transformed, dx_transformedTest, dxTest, var, vars_to_transform, preProcValues)
+rm(dx, transformed, transformedTest, dxTest, var, vars_to_transform, preProcValues)
 ```
 
 
@@ -1293,7 +1274,7 @@ credit.ranger <- train(
   credit_no_na_esfuerzo[[credit.Var.Salida.Usada]],   
   method = "ranger",                  
   verbose = FALSE,
-  tuneLength = 30,                    
+  tuneLength = 15,                    
   trControl = fitControl,         
   num.trees = 50,                     
   importance = 'impurity'            
@@ -1492,6 +1473,7 @@ Todos los modelos se han entrenado bajo una misma configuración de validación 
 El objetivo es identificar qué modelo se ajusta mejor a los datos y generaliza con mayor 
 eficacia.
 ```{r model-comparison}
+set.seed(1234)
 credit.trainCtrl.3cv10.resampAll <- trainControl(
 method = "repeatedcv"
 ,number = 10 ,repeats = 3, 
@@ -1530,22 +1512,22 @@ credit.comparison.ranger <- suppressWarnings(train(
   trControl = credit.trainCtrl.3cv10.resampAll
 ))
 
-credit.comparison.mlp <- suppressWarnings(train(
-  credit_scaled[mlp_inputs],
-  credit_scaled[["Aprobado"]],
-  method = "nnet",
-  trControl = credit.trainCtrl.3cv10.resampAll,
-  tuneGrid = expand.grid(
-    size = c(3, 5, 7, 9, 11),
-    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
-  ),
-  maxit = 200,
-  trace = FALSE
-))
+# credit.comparison.mlp <- suppressWarnings(train(
+#   credit_scaled[mlp_inputs],
+#   credit_scaled[["Aprobado"]],
+#   method = "nnet",
+#   trControl = credit.trainCtrl.3cv10.resampAll,
+#   tuneGrid = expand.grid(
+#     size = c(3, 5, 7, 9, 11),
+#     decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+#   ),
+#   maxit = 200,
+#   trace = FALSE
+# ))
 
 ```
 ```{r}
-models <- list(rpart = credit.comparison.rpart, gbm = credit.comparison.gbm, ranger = credit.comparison.ranger, mlp = credit.comparison.mlp)
+models <- list(rpart = credit.comparison.rpart, gbm = gbm_modelo , ranger = credit.comparison.ranger)#, mlp = credit.comparison.mlp)
 credit.rsamp.comparison <- resamples(models)
 
 summary(credit.rsamp.comparison)
@@ -1556,23 +1538,26 @@ dotplot(credit.rsamp.comparison, metric = "Accuracy",
 
 
 # Selección del modelo final
+Tras analizar los resultados obtenidos por cada modelo en validación cruzada, se observa que tanto el modelo 
+**gbm** (Gradient Boosting Machine) como el **ranger** obtienen resultados muy parecidos, siendo los de gbm
+ligeramente superiores, tanto en el primer cuartil como en la media.
+En comparación, el modelo rpart, aunque interpretable, ha mostrado un rendimiento inferior, 
+como es habitual en árboles individuales. El modelo nnet (red neuronal) ha obtenido resultados competitivos, 
+pero no han superadoa los otros dos.
 
-Justifica por qué se selecciona ese modelo final y qué rendimiento tiene sobre el conjunto de test.
+Por tanto, se selecciona el modelo gbm como el más adecuado para tratar los casos de test.
+Veamos los resultados que obtiene:
 
 ```{r final-eval}
-preds<-predict(gbm_modelo,
+preds<-predict( gbm_modelo,
             newdata=credit.Datos.Test[credit.Vars.Entrada.Usadas])
 
-table(Predicho = preds, Real = credit.Datos.Test[[credit.Var.Salida.Usada]])
-# caret::confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]], positive = "Positivo", mode = "prec_recall" )
-# confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]], positive = "Positivo", mode = "prec_recall" )
+confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]])
 ```
 
 # Conclusiones
 
-Resumen de hallazgos, aprendizajes y posibles mejoras.
 
-Puedes incluir comentarios subjetivos sobre el proceso, dificultades, o ideas para prácticas futuras.
 
 # Anexos
 
