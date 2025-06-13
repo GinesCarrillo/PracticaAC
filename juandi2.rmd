@@ -1019,11 +1019,18 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 
+#Selecciamos la variables numéricas
+datos_numericos <- credit.Datos.Train %>% 
+  select(where(is.numeric)) %>%
+  mutate(fila = row_number()) 
 
-datos_numericos <- credit.Datos.Train[campos_numericos]
+# Convertir a formato largo (long format)
+datos_long <- pivot_longer(datos_numericos, 
+                           cols = -fila,
+                           names_to = "Variable", 
+                           values_to = "Valor")
 
-x11()
-#boxplots con facet para cada variable
+# Boxplots con facet para cada variable
 ggplot(datos_long, aes(x = "", y = Valor)) +
   geom_boxplot(outlier.color = "red", fill = "lightblue") +
   facet_wrap(~ Variable, scales = "free", ncol = 3) +
@@ -1482,8 +1489,10 @@ una transformación de `Impago_previo` a un campo numérico, para poder pasárse
 
 ```{r}
 credit_copy <- credit
+credit_copy$Esfuerzo_financiero <- credit_copy$Deuda + credit_copy$Anos_cotizados  + abs(credit_copy$Ingresos-1)*0.375
 credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
-campos_numericos_nuevo <- c(campos_numericos, 17)
+campos_numericos_nuevo <- c(campos_numericos, 18)
+campos_numericos_nuevo
 
 # Separación de conjuntos
 credit_copy_train <- credit_copy[credit.trainIdx, ]
@@ -1499,7 +1508,7 @@ embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
 ```{r}
 mlp_inputs <- campos_numericos_nuevo
 campos_numericos_nuevo
-mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17)
+mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
 ```
 
 El ajuste de hiperparámetros lo llevaremos a cabo usando `tuneGrid`,
@@ -1523,6 +1532,7 @@ credit_log[campos_log] <- log(credit_log[campos_log] + 1)
 #normalizamos
 campos_numericos
 credit_scaled <- credit_log
+summary(credit_scaled)
 credit_scaled[campos_numericos_nuevo] <- scale(credit_scaled[campos_numericos_nuevo])
 
 sum(is.na(credit_scaled))
