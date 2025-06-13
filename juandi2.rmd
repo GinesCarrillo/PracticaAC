@@ -1666,15 +1666,26 @@ confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]])
 
 # Conclusiones
 
-En esta práctica hemos realizado un análisis completo de un dataset
+En esta práctica hemos realizado un análisis de un dataset
 muy completo desde el punto de vista académico, ya que mantiene un equilibrio
-entre los tipos de atributos y requiere una reflexión sobre el Tratamiento
+entre los tipos de atributos y requiere una reflexión sobre el tratamiento
 de outliers y valores nulos.
 
 El análisis exploratorio de datos mostró una gran influencia del campo `Impago_previo`
 en la clasificación de los individuos. Por ello, tanto los modelos predictivos hechos
 a mano como los modelos de aprendizaje automático han dado la mayor importancia a este
 campo. 
+
+A pesar de que el mejor modelo de los utilizados es gbm, tanto en rendimiento medio como
+en consistencia, todos los modelos seleccionados tienen un rendimiento parecido, al menos
+en los datos de entrenamiento. 
+
+Como valoración general, estamos bastante contentos con el trabajo realizado y nos ha parecido una
+buena forma de poner en práctica los conocimientos de la asignatura. A pesar de estar
+sesgados por conocer qué representan los atributos, creemos que el tratamiento final
+de los datos ha sido riguroso. Con respecto a la utilización de los modelos, gracias
+a la exploración de meta-parámetros con tuneGrid hemos podido entender la influencia
+de estos, teniendo que comprobar primero la teoría para entenderlos.
 
 # Anexos
 
