@@ -553,32 +553,24 @@ categorical_vars <- names(credit)[campos_categoricos]
 plot_categorical <- function(var_name) {
   ggplot(credit, aes(x = .data[[var_name]])) +
     geom_bar(fill = "skyblue", color = "black") +
-14/124 [unnamed-chunk-6]          
+    labs(title = paste("Distribución de", var_name),
+         x = var_name, y = "Cantidad") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
 
-15/124                            
+categorical_plots <- map(categorical_vars, plot_categorical)
 
-16/124 [unnamed-chunk-7]          
+grid.arrange(grobs = categorical_plots, ncol = 2)
+```
 
-17/124                            
-18/124 [unnamed-chunk-8]          
+Nos gustaría también ver cómo los valores que toman estos campos 
+afectan a la variable a predecir. Para ello podemos hacer uso de la función 
+`spineplot`, que nos muestra para cada valor de una variable tanto su 
+poblacion (ancho) como su tasa de aprobados (alto de la barra azul).
 
-19/124                            
-20/124 [ingresos1]                
+```{r}
 
-21/124                            
-
-22/124 [ingresos2]                
-
-23/124                            
-24/124 [ingresos3]                
-
-25/124                            
-
-26/124 [ingresos4]                
-
-27/124                            
-
-28/124 [ingresos-vs-aprobado]     
 par(mfrow = c(3,3))  #plots en cuadrícula 3x3
 
 for (var in categorical_vars) {
