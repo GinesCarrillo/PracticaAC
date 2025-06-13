@@ -88,6 +88,10 @@ if (!requireNamespace("rpart.plot", quietly = TRUE)) {
 if (!requireNamespace("gbm", quietly = TRUE)) {
   install.packages("gbm")
 }
+if (!requireNamespace("nnet", quietly = TRUE)) {
+  install.packages("nnet")
+}
+library(nnet)
 
 library(gbm)
 library(caret)
@@ -1466,8 +1470,6 @@ mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
 ```
 
 ```{r}
-if (!requireNamespace("nnet", quietly = TRUE)) install.packages("nnet")
-library(nnet)
 
 credit_no_na <- credit_copy_train
 #tomamos logaritmo de variables en campos_log
@@ -1548,18 +1550,18 @@ credit.comparison.ranger <- suppressWarnings(train(
   trControl = credit.trainCtrl.3cv10.resampAll
 ))
 
-# credit.comparison.mlp <- suppressWarnings(train(
-#   credit_scaled[mlp_inputs],
-#   credit_scaled[["Aprobado"]],
-#   method = "nnet",
-#   trControl = credit.trainCtrl.3cv10.resampAll,
-#   tuneGrid = expand.grid(
-#     size = c(3, 5, 7, 9, 11),
-#     decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
-#   ),
-#   maxit = 200,
-#   trace = FALSE
-# ))
+credit.comparison.mlp <- suppressWarnings(train(
+  credit_scaled[mlp_inputs],
+  credit_scaled[["Aprobado"]],
+  method = "nnet",
+  trControl = credit.trainCtrl.3cv10.resampAll,
+  tuneGrid = expand.grid(
+    size = c(3, 5, 7, 9, 11),
+    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+  ),
+  maxit = 200,
+  trace = FALSE
+))
 
 ```
 ```{r}
