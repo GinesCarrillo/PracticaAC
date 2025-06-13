@@ -1461,26 +1461,35 @@ Nuevamente, el impago previo es la variable más determinante. Sorprendentemente
 el segundo con mayor importancia. También cabe destacar que Esfuerzo_financiero, la variable que hemos
 creado nosotros es una de las que tiene mayor relevancia.
 
-### Multi Layer Perceptron
+### Perceptrón muticapa (nnet)
 
-Finalmente, queremos entrenar también un MLP para predecir la variable `Aprobado`. 
+Finalmente, queremos entrenar también un perceptrón multicapa (MLP) para predecir la variable `Aprobado`.
 Para esto hacemos uso de la librería `nnet`.
 
-Dada la gran importancia del campo `Impago_previo`, decidimos añadir un nuevo atributo 
-al dataset, llamado `Impago_previo_num`. Este campo es sencillamente una transformación 
-de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nuestro MLP.
+Un MLP es una red neuronal compuesta por varias capas de neuronas conectadas entre sí:
+- Una capa de entrada, por la que se introducen los datos al modelo. Cada neurona de entrada representa una
+variable o característica del conjunto de datos.
 
+- Una o varias capas ocultas, que son las responsables del aprendizaje interno del modelo. Las neuronas de cada
+capa oculta están conectadas a todas las neuronas de la capa anterior.
+
+- Una capa de salida, que genera la predicción final. En este caso, puesto que la nuestra es una tarea
+de clasificación binaria, esta esta formada por una única neurona con función sigmoide.
+
+Dado que un MLP sólo procesa datos númericos y debido a la gran importancia del campo `Impago_previo`,
+decidimos añadir un nuevo atributo al dataset, llamado `Impago_previo_num`. Este campo es sencillamente
+una transformación de `Impago_previo` a un campo numérico, para poder pasárselo como entrada a nuestro MLP.
 
 ```{r}
 credit_copy <- credit
-credit_copy$Esfuerzo_financiero <- credit_copy$Deuda + credit_copy$Anos_cotizados  + abs(credit_copy$Ingresos-1)*0.375
 credit_copy$Impago_previo_num <- ifelse(credit_copy$Impago_previo == "f", 1, 0)
-campos_numericos_nuevo <- c(campos_numericos, 18)
+campos_numericos_nuevo <- c(campos_numericos, 17)
 
 # Separación de conjuntos
 credit_copy_train <- credit_copy[credit.trainIdx, ]
 credit_copy_test <- credit_copy[-credit.trainIdx, ]
 ```
+
 A continuación, elegimos los campos que usaremos como entrada para el modelo. 
 Experimentando con los datos de entrada, nos sorprendió ver que se producía una ligera 
 disminución en `Accuracy` cuando se elimina de los datos de entrada del modelo el campo 
@@ -1490,18 +1499,28 @@ embargo, dado que parece producir una pequeña mejora, lo hemos conservado.
 ```{r}
 mlp_inputs <- campos_numericos_nuevo
 campos_numericos_nuevo
-mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17, 18)
+mlp_inputs_no_cp <- c(2, 3, 8, 11, 15, 17)
 ```
 
+El ajuste de hiperparámetros lo llevaremos a cabo usando `tuneGrid`,
+y modificaremos los valores de `size` y `decay`:
+- `size` hace referencia al número de neuronas en la capa oculta
+de la red. El conjunto de valores que hemos elegido es `[3, 7, 11, 15]`
+- Weight decay es una técnica para evitar el sobrentrenamiento. Consiste en
+minimizar los pesos de las neuronas junto con el error de clasificación cometido.
+`decay` controla la intensidad de la regularización. Los valores elegidos
+han sido `[0, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 1]`
+
 ```{r}
+if (!requireNamespace("nnet", quietly = TRUE)) install.packages("nnet")
+library(nnet)
 
 credit_no_na <- credit_copy_train
 #tomamos logaritmo de variables en campos_log
 credit_log <- credit_no_na
 credit_log[campos_log] <- log(credit_log[campos_log] + 1)
-#credit_log[11] <- log(credit_log[11] + 1)
 
-
+#normalizamos
 campos_numericos
 credit_scaled <- credit_log
 credit_scaled[campos_numericos_nuevo] <- scale(credit_scaled[campos_numericos_nuevo])
@@ -1517,8 +1536,8 @@ mlp_cv <- train(
   method = "nnet",
   trControl = ctrl,
   tuneGrid = expand.grid(
-    size = c(3, 5, 7, 9, 11),
-    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 1)
+    size = c(3, 7, 11, 15),
+    decay = c(0, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 1)
   ),
   maxit = 200,
   trace = FALSE
@@ -1527,6 +1546,22 @@ mlp_cv <- train(
 print(mlp_cv)
 plot(mlp_cv)
 ```
+
+Obsevando los resultados obtenidos podemos comprobar que el efecto
+de `decay` es notable y muy positivo. Al ser un conjunto de datos pequeño,
+existe una tendencia fuerte a sobreajustar. Forzar los pesos a tomar
+valores pequeños limita este efecto.
+
+También vemos que los resultados obtenidos son similares independientemente
+del número de neuronas en la capa oculta. De este hecho deducimos que este
+dataset no contiene patrones que se puedan explotar para mejorar la
+clasificacion, más allá de alguna tenue mejora sobre los patrones superficiales
+ya encontrados por nosotros.
+
+Los mejores resultados se obtienen con un valor de `size` 11 o 15, con un `decay`
+de 0.3. En realidad este máximo parece causa de ligeras desviaciones aleatorias
+más que de una adecuación mayor del `size` elegido, lo que se puede deducir del
+hecho de que las cuatro gráficas se entrecruzan constantemente.
 
 # Comparación de modelos
 
