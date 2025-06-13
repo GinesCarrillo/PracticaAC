@@ -1,0 +1,14 @@
+/* Para justificar el texto */
+p {
+  text-align: justify;
+}
+
+/* Para añadir sangría en la primera línea */
+p {
+  text-indent: 2em; /* Puedes ajustar el valor según necesites (por ejemplo, 1.5em, 30px, etc.) */
+}
+
+/* Si quieres que los títulos no tengan sangría, puedes añadir: */
+h1, h2, h3, h4, h5, h6 {
+  text-indent: 0;
+}
