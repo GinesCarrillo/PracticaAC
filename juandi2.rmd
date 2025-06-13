@@ -550,7 +550,7 @@ perdemos la ayuda de la mayor parte de herramientas estadísticas.
 Sin embargo, esto no significa que no podamos extraer información útil de estos campos. 
 Podemos comenzar nuetro análisis graficando un histograma de cada variable categórica.
 ```{r}
-summary(credit)
+summary(credit[campos_categoricos])
 categorical_vars <- names(credit)[campos_categoricos]
 
 # Create a plotting function for categorical variables
