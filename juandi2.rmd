@@ -1503,7 +1503,9 @@ mlp_cv <- train(
 print(mlp_cv)
 plot(mlp_cv)
 ```
+
 # Comparación de modelos
+
 En esta sección llevamos a cabo la comparación de los cuatro modelos.
 
 Todos los modelos se han entrenado bajo una misma configuración de validación cruzada 
@@ -1595,11 +1597,15 @@ confusionMatrix(preds, credit.Datos.Test[[credit.Var.Salida.Usada]])
 
 # Conclusiones
 
+En esta práctica hemos realizado un análisis completo de un dataset
+muy completo desde el punto de vista académico, ya que mantiene un equilibrio
+entre los tipos de atributos y requiere una reflexión sobre el Tratamiento
+de outliers y valores nulos.
 
-
-Resumen de hallazgos, aprendizajes y posibles mejoras.
-
-Puedes incluir comentarios subjetivos sobre el proceso, dificultades, o ideas para prácticas futuras.
+El análisis exploratorio de datos mostró una gran influencia del campo `Impago_previo`
+en la clasificación de los individuos. Por ello, tanto los modelos predictivos hechos
+a mano como los modelos de aprendizaje automático han dado la mayor importancia a este
+campo. 
 
 # Anexos
 
